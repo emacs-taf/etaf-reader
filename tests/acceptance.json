@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "load_path": [
+    ".",
+    "tests",
+    "../../etaf",
+    "../../etaf-ui",
+    "../../etaf-db",
+    "../../ebox",
+    "../../ecss"
+  ],
+  "support": [],
+  "cases": [
+    {
+      "name": "etaf-reader-tests-headless-session-starts-on-shelf",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "A session built without a buffer starts on the shelf and needs no window or backend."
+    },
+    {
+      "name": "etaf-reader-tests-scan-imports-into-the-store",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Scanning stores the discovered book and opening imports its chapters and lines."
+    },
+    {
+      "name": "etaf-reader-tests-pages-turn-and-chapters-advance",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Page turns move by one page and crossing the last page opens the next chapter."
+    },
+    {
+      "name": "etaf-reader-tests-selection-annotate-and-note",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "A selection becomes an annotation that can change style and carry a thought, then be deleted."
+    },
+    {
+      "name": "etaf-reader-tests-progress-is-restored",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Saving stores chapter and line and a new session resumes exactly there."
+    },
+    {
+      "name": "etaf-reader-tests-search-finds-and-selects",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Search finds a phrase across chapters, jumps to it and selects the match."
+    },
+    {
+      "name": "etaf-reader-tests-reflow-keeps-position",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "A column change re-wraps the chapter and keeps the reading offset."
+    },
+    {
+      "name": "etaf-reader-tests-export-notes",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Exporting writes quotations and thoughts of the book as Markdown."
+    },
+    {
+      "name": "etaf-reader-tests-shelf-filters-use-state",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Shelf filters read the stored reading state instead of a second copy."
+    }
+  ]
+}
