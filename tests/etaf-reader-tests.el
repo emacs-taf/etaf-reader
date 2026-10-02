@@ -226,7 +226,8 @@
               (etaf-reader-save-now session)
               (should (> percent 0))
               (let* ((second (etaf-reader-create :parser parser))
-                     (state (progn (etaf-reader-open-book
+                     (state (progn (etaf-reader-refresh-library second)
+                                   (etaf-reader-open-book
                                     second (car (etaf-reader-books second)))
                                    (etaf-reader-state second)))
                      (line (etaf-reader-tests--line

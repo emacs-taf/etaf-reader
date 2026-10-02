@@ -53,12 +53,28 @@ internal.
 ## Performance
 
 The reading path does no I/O: the current chapter's text, lines, annotations
-and states are in memory, and a page turn renders `rows × spread` lines.
-Wrapping is cached per (chapter, column count) and only re-run when the column
-count changes or a chapter is opened. The shelf reads cached states from one
-hash table instead of one query per row. The windowed render keeps the node
-count constant regardless of chapter size, which is what keeps key latency
-independent of the book.
+and states are in memory. Wrapping is cached per (chapter, column count) and
+only re-run when the column count changes or a chapter is opened. The shelf
+reads cached states from one hash table instead of one query per row. The
+windowed render keeps the node count constant regardless of chapter size.
+
+Two publication paths exist, and the difference is measured:
+
+- A plain-body page turn replaces the visible line texts and the status labels
+  through `etaf-runtime-update-host-contents`, one retained Ebox publication.
+  Measured at 27 ms for 90 line slots plus the page and percent labels on a
+  GPU frame, with no garbage collection in the sample.
+- Anything the retained path cannot patch -- a page with a heading, an
+  annotation or an active selection -- falls back to an ordinary ETAF
+  publication.  That currently costs ~400 ms per turn on the same frame, which
+  is the framework's whole-view publication cost, not a reader defect.  The
+  fast path is skipped deliberately rather than applied partially, because a
+  retained content update replaces only text strings.
+
+The `:line` position is a plain session field so the fast path can move the
+window without triggering a reactive publication; `:revision` is the explicit
+repaint trigger, and `:published-line` records which page the retained Hosts
+belong to.  Keep those three in sync when changing the reading Views.
 
 ## Dependencies
 

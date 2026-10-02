@@ -175,7 +175,7 @@
          (kind (plist-get line :kind)))
     (etaf-node
      'box
-     (list :id (format "reader-line-%d" (or (plist-get line :key) 0))
+     (list :id (format "reader-line-%d" (or (plist-get line :slot) 0))
            :width 'stretch
            :height '(lh 1)
            :overflow 'hidden
@@ -183,9 +183,28 @@
            :font-weight (if (eq kind 'heading) 'bold nil)
            :color (when (eq kind 'hr) :dim)
            :pointer 'text
-           :on-drag (lambda (gesture)
-                      (etaf-reader--drag session gesture)))
-     (or nodes (list (etaf-node 'text nil (list "")))))))
+           ;; One session-wide closure keeps the retained Behavior stable; a
+           ;; fresh lambda per line would rebuild every line each render.
+           :on-drag (plist-get session :drag-handler))
+     (cond
+      ((and (= (length segments) 1)
+            (let ((segment (car segments)))
+              (and (null (plist-get segment :fill))
+                   (null (plist-get segment :decoration))
+                   (null (plist-get segment :bold))
+                   (null (plist-get segment :italic))
+                   (null (plist-get segment :color))
+                   (null (plist-get segment :annotation)))))
+       ;; A plain line is one retained text Host: the page-turn fast path
+       ;; replaces this string without an ordinary publication.
+       (list (etaf-node 'text
+                        (list :ref (intern (format "reader-text-%d"
+                                                   (or (plist-get line :slot) 0)))
+                              :id (format "reader-text-%d"
+                                          (or (plist-get line :slot) 0)))
+                        (list (or (plist-get (car segments) :text) "")))))
+      (t
+       (or nodes (list (etaf-node 'text nil (list "")))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Selection toolbar
@@ -265,7 +284,7 @@
           (etaf-view
            (etaf-popover
                :open t
-               :anchor (format "reader-line-%d" line)
+               :anchor (format "reader-line-%d" (- line top))
                :placement (if (< (- line top) (/ rows 2)) 'bottom-start 'top-start)
                :width '(ch 46)
                :on-close closing
@@ -330,17 +349,21 @@
          (spread (or (plist-get metrics :spread) 1))
          (rows (max 1 (or (plist-get metrics :rows) 20)))
          (columns (max 16 (or (plist-get metrics :columns) 40)))
-         (mode (etaf-reader--read session :mode))
          (lines (etaf-reader--read session :lines))
          (total (length lines))
          (top (min (etaf-reader--read session :line) (max 0 total)))
          (page-size (* rows spread))
-         (visible (seq-subseq lines top (min total (+ top page-size))))
+         ;; Slots give every rendered line a stable identity across page
+         ;; turns, so Ebox reuses the nodes and only patches their text.
+         (visible (cl-loop for line in (seq-subseq lines top
+                                                  (min total (+ top page-size)))
+                           for slot from 0
+                           collect (let ((copy (copy-sequence line)))
+                                     (plist-put copy :slot slot))))
          (slices (etaf-reader--column-slices visible rows spread))
          (chapter (etaf-reader--read session :chapter))
          (book (etaf-reader--read session :book))
-         (page (if (= page-size 0) 1 (1+ (/ top page-size))))
-         (pages (max 1 (ceiling (/ (float total) page-size)))))
+         )
     (etaf-view
      (column :width 'stretch :height 'stretch
              :background-color (etaf-reader-color :bg theme)
@@ -360,11 +383,11 @@
        (flex :width 'stretch :height 'stretch :align-items 'stretch
              :gap (list '(lh 0) (list 'ch 2))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0))
-         (column :for (slice slices) :key (plist-get (car slice) :key)
+         (column :for (slice slices) :key (plist-get (car slice) :slot)
                  ;; One cell of slack absorbs sub-cell rounding.
                  :width (list 'ch (+ columns 1)) :flex-shrink 0
                  :item-gap '(lh 0) :padding '((lh 1) (ch 0))
-           (box :for (line slice) :key (plist-get line :key)
+           (box :for (line slice) :key (plist-get line :slot)
                 :width 'stretch :height '(lh 1) :overflow 'hidden
              (expr (etaf-reader--view-line session line theme))))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0)))
@@ -373,9 +396,8 @@
              :align-items 'center :gap '((lh 0) (ch 2))
              :border-top (list '(px 1) 'solid (etaf-reader-color :line theme))
          (box :height '(lh 1) :color (etaf-reader-color :muted theme)
-           (text (expr (if (eq mode 'page)
-                           (format "第 %d/%d 页" page pages)
-                         (format "第 %d/%d 行" (1+ top) total)))))
+           (text :ref 'reader-page :id "reader-page"
+                 (expr (etaf-reader--page-label session))))
          (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0) :height '(lh 1)
               :overflow 'hidden :text-align 'center
               :color (etaf-reader-color :dim theme)
@@ -384,7 +406,8 @@
                                "空格 翻页 · h/l 选字 · v 选择 · s 搜索 · c 目录 · a 笔记 · ? 帮助"
                              "空格翻页 · v 选择 · s 搜索 · c 目录 · ? 帮助")))))
          (box :height '(lh 1) :color (etaf-reader-color :accent theme)
-           (text (expr (etaf-reader-percent-text session)))))))))
+           (text :ref 'reader-percent :id "reader-percent"
+                 (expr (etaf-reader-percent-text session)))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Shelf
@@ -559,6 +582,12 @@
 
 (defun etaf-reader-view (session)
   "Return the View of SESSION."
+  ;; Track the repaint trigger: commands that cannot use the retained fast
+  ;; path bump it to force an ordinary publication.
+  (etaf-reader--read session :revision)
+  ;; Record which page this publication renders: the retained text Hosts only
+  ;; exist for the slots of this page, so the fast path checks against it.
+  (plist-put session :published-line (etaf-reader--read session :line))
   (let ((view (etaf-reader--read session :view)))
     (etaf-node
      'fragment

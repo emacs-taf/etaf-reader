@@ -117,9 +117,10 @@
 ;; keep their annotations and reading state.
 ;;
 ;; Function: etaf-reader-books (session)
-;; Return SESSION's shelf rows, filtered by `etaf-reader-set-filter'.
-;; Each row is a book plist from the store (`:id', `:title', `:author',
-;; `:format', `:path', `:chapters', `:chars', `:pages').
+;; Return SESSION's loaded shelf rows, filtered by `etaf-reader-set-filter'.
+;; Each row is a book plist (`:id', `:title', `:author', `:format', `:path',
+;; `:chapters', `:chars', `:pages').  Refresh the shelf first (or open the
+;; reader, which loads it) before reading this list.
 ;;
 ;; Function: etaf-reader-lines (session)
 ;; Return the wrapped lines of SESSION's current chapter.

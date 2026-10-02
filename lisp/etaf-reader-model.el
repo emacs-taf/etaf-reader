@@ -60,16 +60,30 @@
   (plist-get session key))
 
 (defun etaf-reader--read (session key)
-  "Return SESSION's current value for KEY, tracked while rendering."
-  (etaf-value (etaf-reader--ref session key)))
+  "Return SESSION's current value for KEY, tracked while rendering.
+`:line' is a plain field: the page-turn fast path moves the visible window
+through retained Hosts without an ordinary publication, so its authoritative
+value must not be a reactive source."
+  (if (eq key :line)
+      (plist-get session :line)
+    (etaf-value (etaf-reader--ref session key))))
 
 (defun etaf-reader--write (session key value)
-  "Publish VALUE as SESSION's value for KEY and return VALUE."
-  (let ((ref (etaf-reader--ref session key)))
-    (when ref
-      (unless (equal (etaf-value ref) value)
-        (etaf-set-value ref value)))
-    value))
+  "Publish VALUE as SESSION's value for KEY and return VALUE.
+Writes to `:line' stay plain; use `etaf-reader-repaint' when the change needs
+an ordinary publication (a chapter, a styled window or a reflow)."
+  (if (eq key :line)
+      (setf (plist-get session :line) value)
+    (let ((ref (etaf-reader--ref session key)))
+      (when ref
+        (unless (equal (etaf-value ref) value)
+          (etaf-set-value ref value)))))
+  value)
+
+(defun etaf-reader-repaint (session)
+  "Repaint the mounted reader with an ordinary publication."
+  (etaf-reader--write session :revision
+                      (1+ (or (etaf-reader--read session :revision) 0))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Session
@@ -79,33 +93,41 @@
   "Create a headless reader session and return it.
 PARSER defaults to the `ebook-parse' backend; THEME defaults to
 `etaf-reader-theme'."
-  (list
-   :parser (or parser etaf-reader-default-parser)
-   :buffer nil
-   :view (etaf-ref 'shelf :name 'etaf-reader-view)
-   :message (etaf-ref nil :name 'etaf-reader-message)
-   :books (etaf-ref nil :name 'etaf-reader-books)
-   :states (etaf-ref nil :name 'etaf-reader-states)
-   :filter (etaf-ref 'all :name 'etaf-reader-filter)
-   :book (etaf-ref nil :name 'etaf-reader-book)
-   :chapters (etaf-ref nil :name 'etaf-reader-chapters)
-   :chapter (etaf-ref nil :name 'etaf-reader-chapter)
-   :annotations (etaf-ref nil :name 'etaf-reader-annotations)
-   :book-notes (etaf-ref nil :name 'etaf-reader-book-notes)
-   :lines (etaf-ref nil :name 'etaf-reader-lines)
-   :line (etaf-ref 0 :name 'etaf-reader-line)
-   :mode (etaf-ref 'page :name 'etaf-reader-mode)
-   :metrics (etaf-ref (list :columns 40 :rows 20 :spread 1
-                            :layout 'medium :mode 'page)
-                      :name 'etaf-reader-metrics)
-   :cursor (etaf-ref nil :name 'etaf-reader-cursor)
-   :selection (etaf-ref nil :name 'etaf-reader-selection)
-   :toolbar (etaf-ref nil :name 'etaf-reader-toolbar)
-   :pane (etaf-ref nil :name 'etaf-reader-pane)
-   :search (etaf-ref nil :name 'etaf-reader-search)
-   :theme (etaf-ref (or theme etaf-reader-theme) :name 'etaf-reader-theme)
-   :save-timer nil
-   :reading-start (float-time)))
+  (let ((session (list
+                  :parser (or parser etaf-reader-default-parser)
+                  :buffer nil
+                  :view (etaf-ref 'shelf :name 'etaf-reader-view)
+                  :message (etaf-ref nil :name 'etaf-reader-message)
+                  :books (etaf-ref nil :name 'etaf-reader-books)
+                  :states (etaf-ref nil :name 'etaf-reader-states)
+                  :filter (etaf-ref 'all :name 'etaf-reader-filter)
+                  :book (etaf-ref nil :name 'etaf-reader-book)
+                  :chapters (etaf-ref nil :name 'etaf-reader-chapters)
+                  :chapter (etaf-ref nil :name 'etaf-reader-chapter)
+                  :annotations (etaf-ref nil :name 'etaf-reader-annotations)
+                  :book-notes (etaf-ref nil :name 'etaf-reader-book-notes)
+                  :lines (etaf-ref nil :name 'etaf-reader-lines)
+                  :line 0
+                  :published-line 0
+                  :revision (etaf-ref 0 :name 'etaf-reader-revision)
+                  :mode (etaf-ref 'page :name 'etaf-reader-mode)
+                  :metrics (etaf-ref (list :columns 40 :rows 20 :spread 1
+                                           :layout 'medium :mode 'page)
+                                     :name 'etaf-reader-metrics)
+                  :cursor (etaf-ref nil :name 'etaf-reader-cursor)
+                  :selection (etaf-ref nil :name 'etaf-reader-selection)
+                  :toolbar (etaf-ref nil :name 'etaf-reader-toolbar)
+                  :pane (etaf-ref nil :name 'etaf-reader-pane)
+                  :search (etaf-ref nil :name 'etaf-reader-search)
+                  :theme (etaf-ref (or theme etaf-reader-theme)
+                                   :name 'etaf-reader-theme)
+                  :save-timer nil
+                  :reading-start (float-time))))
+    ;; One drag closure for the whole session: a fresh lambda per line per
+    ;; render would replace every line Behavior on each page turn.
+    (plist-put session :drag-handler
+               (lambda (gesture) (etaf-reader--drag session gesture)))
+    session))
 
 (defun etaf-reader-state (session)
   "Return SESSION's state as a detached plist snapshot."
@@ -254,10 +276,10 @@ own display width counts against the first line."
 (defun etaf-reader--block-kind (type)
   "Return the line kind and indent of block TYPE as a cons."
   (pcase type
-    ((or "h1" "h2" "h3" "h4" "h5" "h6") '('.heading . nil))
-    ("quote" '(.quote . nil))
-    ("pre" '(.pre . nil))
-    (_ '(.body . "  "))))
+    ((or "h1" "h2" "h3" "h4" "h5" "h6") '(heading . nil))
+    ("quote" '(quote . nil))
+    ("pre" '(pre . nil))
+    (_ '(body . "  "))))
 
 (defun etaf-reader--line-styles (block line-start line-end shift)
   "Return styled ranges of one line from BLOCK's runs.
@@ -334,9 +356,10 @@ Each line is a plist: `:key' `:start' `:end' `:text' `:kind' `:styles' `:src'."
       (when (< (or (plist-get chapter :idx) 0) index)
         (setq total (+ total (or (plist-get chapter :chars) 0)))))))
 
-(defun etaf-reader-load-chapter (session index)
+(defun etaf-reader-load-chapter (session index &optional offset)
   "Load chapter INDEX of SESSION's book into the session and return it.
-Signals `etaf-reader-error' when the chapter is not stored."
+OFFSET positions the window inside the chapter before the single publication
+that shows it.  Signals `etaf-reader-error' when the chapter is not stored."
   (let* ((book (etaf-reader--read session :book))
          (book-id (plist-get book :id))
          (summaries (etaf-reader--read session :chapters))
@@ -357,6 +380,11 @@ Signals `etaf-reader-error' when the chapter is not stored."
            (metrics (etaf-reader--read session :metrics))
            (lines (etaf-reader--wrap-chapter chapter
                                              (or (plist-get metrics :columns) 40))))
+      ;; Plain write: the batch below publishes this position with the text.
+      (etaf-reader--write session :line
+                          (if (and offset (> (or offset 0) 0))
+                              (etaf-reader--line-for-offset lines offset)
+                            0))
       (etaf-batch
         (etaf-reader--write session :chapter chapter)
         (etaf-reader--write session :lines lines)
@@ -381,19 +409,15 @@ Signals `etaf-reader-error' when the chapter is not stored."
   "Open chapter INDEX positioned at character OFFSET (or line 0)."
   (let* ((summaries (etaf-reader--read session :chapters))
          (count (length summaries))
-         (index (max 0 (min (1- (max 1 count)) index))))
+         (index (max 0 (min (1- (max 1 count)) index)))
+         (title (or (plist-get (etaf-reader--read session :book) :title) "")))
     (etaf-reader-save-quiet session)
-    (etaf-reader-load-chapter session index)
-    (let* ((lines (etaf-reader--read session :lines))
-           (line (if (and offset (> (or offset 0) 0))
-                     (etaf-reader--line-for-offset lines offset)
-                   0)))
-      (etaf-reader--write session :line line)
-      (etaf-reader-message session
-                           (format "%s · 第 %d/%d 章"
-                                   (or (plist-get (etaf-reader--read session :book) :title) "")
-                                   (1+ index) count))
-      (etaf-reader-schedule-save session))))
+    ;; One batch, one publication: the message, the chapter and the window.
+    (etaf-batch
+      (etaf-reader--write session :message
+                          (format "%s · 第 %d/%d 章" title (1+ index) count))
+      (etaf-reader-load-chapter session index offset))
+    (etaf-reader-schedule-save session)))
 
 (defun etaf-reader--line-for-offset (lines offset)
   "Return the first line index whose end is past OFFSET."
@@ -430,10 +454,86 @@ stored annotations of that chapter index."
   "Clamp LINE to SESSION's current chapter."
   (max 0 (min (max 0 (1- (length (etaf-reader--read session :lines)))) line)))
 
+(defun etaf-reader--plain-window-p (session top)
+  "Return non-nil when the window at TOP renders as plain body lines.
+The retained fast path can only patch text: any styled line, annotation,
+selection or caret in the old or new window needs an ordinary publication."
+  (let* ((lines (etaf-reader--read session :lines))
+         (metrics (etaf-reader--read session :metrics))
+         (page-size (max 1 (* (or (plist-get metrics :rows) 20)
+                              (or (plist-get metrics :spread) 1))))
+         (window (seq-subseq lines (min top (length lines))
+                             (min (length lines) (+ top page-size)))))
+    (and window
+         (null (etaf-reader--read session :selection))
+         (null (etaf-reader--read session :cursor))
+         (cl-every (lambda (line)
+                     (and (eq (plist-get line :kind) 'body)
+                          (null (plist-get line :styles))))
+                   window)
+         (null (seq-some
+                (lambda (annotation)
+                  (let ((start (or (plist-get (car window) :start) 0))
+                        (end (or (plist-get (car (last window)) :end) 0)))
+                    (and (< (or (plist-get annotation :start) 0) end)
+                         (> (or (plist-get annotation :end) 0) start))))
+                (etaf-reader--read session :annotations))))))
+
+(defun etaf-reader--display-window (session)
+  "Replace the visible line texts and status through retained Hosts.
+Return non-nil when the retained update committed; nil when the caller must
+publish ordinarily instead."
+  (let* ((buffer (plist-get session :buffer))
+         (runtime (and (buffer-live-p buffer) (etaf-runtime-for-buffer buffer)))
+         (lines (etaf-reader--read session :lines))
+         (metrics (etaf-reader--read session :metrics))
+         (top (etaf-reader--read session :line))
+         (page-size (max 1 (* (or (plist-get metrics :rows) 20)
+                              (or (plist-get metrics :spread) 1))))
+         (window (seq-subseq lines (min top (length lines))
+                             (min (length lines) (+ top page-size))))
+         (slot 0))
+    (when (and runtime
+               (etaf-runtime-mounted-p runtime)
+               ;; The caller checked that the published structure matches the
+               ;; page the slots came from; the new page must fit exactly.
+               (>= (- (length lines) top) page-size)
+               (etaf-reader--plain-window-p session top))
+      (let ((updates (list (cons 'reader-page (etaf-reader--page-label session))
+                           (cons 'reader-percent (etaf-reader-percent-text session)))))
+        (dolist (line window)
+          (push (cons (intern (format "reader-text-%d" slot))
+                      (or (plist-get line :text) ""))
+                updates)
+          (setq slot (1+ slot)))
+        (while (< slot page-size)
+          (push (cons (intern (format "reader-text-%d" slot)) "") updates)
+          (setq slot (1+ slot)))
+        ;; A page whose published structure carries a styled line has slots
+        ;; without a retained text Host; the batch then rejects every target
+        ;; before applying any.  Report that as "no fast path" so the caller
+        ;; repaints, which rebuilds the refs for the new page.
+        (condition-case nil
+            (progn
+              (etaf-runtime-update-host-contents runtime updates)
+              (plist-put session :published-line top)
+              t)
+          (etaf-runtime-error nil))))))
+
 (defun etaf-reader-goto-line (session line)
-  "Move SESSION's top line to LINE."
-  (etaf-reader--write session :line (etaf-reader--clamp-line session line))
-  (etaf-reader-schedule-save session))
+  "Move SESSION's top line to LINE.
+A mounted reader moves the visible window through retained Hosts when both the
+old and the new window are plain body text; anything else repaints once."
+  (let* ((line (etaf-reader--clamp-line session line))
+         (previous (etaf-reader--read session :line))
+         (published (plist-get session :published-line)))
+    (unless (equal previous line)
+      (etaf-reader--write session :line line)
+      (unless (and (equal previous published)
+                   (etaf-reader--plain-window-p session published)
+                   (etaf-reader--display-window session))
+        (etaf-reader-repaint session)))
+    (etaf-reader-schedule-save session)))
 
 (defun etaf-reader-next-page (session)
   "Turn to the next page, moving into the next chapter at the end."
@@ -502,6 +602,20 @@ stored annotations of that chapter index."
          (offset (+ (or (plist-get chapter :start) 0)
                     (or (plist-get entry :start) 0))))
     (min 100.0 (* 100.0 (/ (float offset) total)))))
+
+(defun etaf-reader--page-label (session)
+  "Return SESSION's position label for the status line."
+  (let* ((metrics (etaf-reader--read session :metrics))
+         (rows (or (plist-get metrics :rows) 20))
+         (spread (or (plist-get metrics :spread) 1))
+         (page-size (max 1 (* rows spread)))
+         (total (length (etaf-reader--read session :lines)))
+         (top (etaf-reader--read session :line)))
+    (if (eq (etaf-reader--read session :mode) 'page)
+        (format "第 %d/%d 页"
+                (1+ (/ top page-size))
+                (max 1 (ceiling (/ (float total) page-size))))
+      (format "第 %d/%d 行" (1+ top) total))))
 
 (defun etaf-reader-percent-text (session)
   "Return SESSION's progress as a display string."
@@ -826,8 +940,10 @@ Return a plist `(:query :matches :index)' and jump to the first match."
     report))
 
 (defun etaf-reader-books (session)
-  "Return SESSION's shelf rows filtered by the current filter."
-  (let ((books (etaf-reader-store-books))
+  "Return SESSION's shelf rows filtered by the current filter.
+Reads the cached rows, never the store: the shelf View runs during ETAF's
+publication, where touching a Data Controller is a render side effect."
+  (let ((books (etaf-reader--read session :books))
         (filter (etaf-reader--read session :filter)))
     (cl-remove-if-not
      (lambda (book)
@@ -957,10 +1073,7 @@ session's top line, and every rendered line is one buffer line."
         (let ((runtime (etaf-runtime-for-buffer buffer)))
           (when runtime
             (when-let* ((base (ignore-errors
-                               (etaf-host-ref-position
-                                runtime
-                                (format "reader-line-%d"
-                                        (etaf-reader--read session :line))))))
+                               (etaf-host-ref-position runtime "reader-line-0"))))
               (cons (+ (etaf-reader--read session :line)
                        (- (line-number-at-pos position)
                           (line-number-at-pos base)))

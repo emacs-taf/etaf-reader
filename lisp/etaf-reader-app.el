@@ -125,6 +125,9 @@
     (define-key map (kbd "k") #'etaf-reader-backward-line-command)
     (define-key map (kbd "h") #'etaf-reader-backward-char-command)
     (define-key map (kbd "l") #'etaf-reader-forward-char-command)
+    ;; Upper case always moves between chapters, selection or not.
+    (define-key map (kbd "H") #'etaf-reader-chapter-backward-command)
+    (define-key map (kbd "L") #'etaf-reader-chapter-forward-command)
     (define-key map (kbd "<left>") #'etaf-reader-previous-page-command)
     (define-key map (kbd "<right>") #'etaf-reader-next-page-command)
     (define-key map (kbd "<down>") #'etaf-reader-forward-line-command)
@@ -154,6 +157,46 @@
     (define-key map (kbd "<mouse-4>") #'etaf-reader-wheel-up-command)
     map)
   "Keymap of a buffer opened by `etaf-reader-open'.")
+
+;;; ---------------------------------------------------------------------------
+;;; Renderer-owned keys
+;;; ---------------------------------------------------------------------------
+
+(defvar etaf-reader--command-maps
+  (list (cons 'etaf-reader--session
+              (let ((map (make-sparse-keymap)))
+                ;; The renderer's minor-mode map owns these keys and wins over
+                ;; a major-mode map; an `emulation-mode-map-alists' entry wins
+                ;; over every minor mode, so the reader replaces them here.
+                (define-key map (kbd "SPC") #'etaf-reader-next-page-command)
+                (define-key map (kbd "S-SPC") #'etaf-reader-previous-page-command)
+                (define-key map (kbd "C-v") #'etaf-reader-next-page-command)
+                (define-key map (kbd "M-v") #'etaf-reader-previous-page-command)
+                (define-key map (kbd "DEL") #'etaf-reader-previous-page-command)
+                (define-key map (kbd "n") #'etaf-reader-search-next-command)
+                (define-key map (kbd "q") #'etaf-reader-close)
+                (define-key map (kbd "RET") #'etaf-reader-return-command)
+                (define-key map [wheel-up] #'etaf-reader-wheel-up-command)
+                (define-key map [wheel-down] #'etaf-reader-wheel-down-command)
+                (define-key map [mouse-4] #'etaf-reader-wheel-up-command)
+                (define-key map [mouse-5] #'etaf-reader-wheel-down-command)
+                map)))
+  "Reader bindings that must beat the renderer's own minor-mode map.
+The alist's key is `etaf-reader--session', the buffer-local variable every
+reader buffer owns, so the entry is active exactly there.  TAB focus cycling
+and activation of focused controls stay the renderer's (RET dispatches
+between them).")
+
+(defun etaf-reader-return-command ()
+  "Confirm the current selection, or activate the focused control."
+  (interactive)
+  (etaf-reader--call
+   (lambda ()
+     (let ((session (etaf-reader--current)))
+       (if (and (etaf-reader-selection session)
+                (null (etaf-focused-host-ref)))
+           (etaf-reader-show-toolbar session)
+         (etaf-activate))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Commands
@@ -220,6 +263,18 @@
        (if (etaf-reader--read session :cursor)
            (etaf-reader--cursor-move session 0 -1)
          (etaf-reader-previous-chapter session))))))
+
+(defun etaf-reader-chapter-forward-command ()
+  "Open the next chapter."
+  (interactive)
+  (etaf-reader--call
+   (lambda () (etaf-reader-next-chapter (etaf-reader--current)))))
+
+(defun etaf-reader-chapter-backward-command ()
+  "Open the previous chapter."
+  (interactive)
+  (etaf-reader--call
+   (lambda () (etaf-reader-previous-chapter (etaf-reader--current)))))
 
 (defun etaf-reader-toggle-selection-command ()
   "Start or clear the keyboard selection."
@@ -421,6 +476,11 @@
     (with-current-buffer buffer
       (setq-local etaf-reader--session session)
       (setq-local truncate-lines t)
+      (setq-local mode-line-format nil)
+      (setq-local emulation-mode-map-alists
+                  (cons 'etaf-reader--command-maps
+                        (remq 'etaf-reader--command-maps
+                              emulation-mode-map-alists)))
       (setq-local buffer-display-table
                   (let ((table (copy-sequence (or standard-display-table
                                                   (make-display-table)))))
@@ -430,8 +490,15 @@
                            (list :background
                                  (etaf-reader-color :bg (etaf-reader--read session :theme))))
       (use-local-map etaf-reader-mode-map))
-    (pop-to-buffer buffer)
+    ;; A native text application owns the window it was opened from: a
+    ;; `display-buffer' rule must not split the frame into a second pane.
+    (let ((display-buffer-overriding-action '((display-buffer-same-window))))
+      (pop-to-buffer buffer))
     (setq window (get-buffer-window buffer t))
+    ;; Store reads happen before mounting: creating Data Controllers inside
+    ;; ETAF's publication is a render side effect and is rejected.
+    (etaf-reader--write session :books (etaf-reader-store-books))
+    (etaf-reader-refresh-states session)
     (etaf-reader-sync-metrics session)
     (etaf-mount buffer (etaf-reader-view-for-session session)
                 (list :viewport-width
@@ -440,8 +507,6 @@
                       (if (window-live-p window) (window-body-height window) 30)))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
     (etaf-reader--install-size-hook)
-    (etaf-reader--write session :books (etaf-reader-store-books))
-    (etaf-reader-refresh-states session)
     buffer))
 
 (defun etaf-reader--open-path (session path)
@@ -473,7 +538,7 @@ and tests display the exact state they built."
      ((and (stringp file) (file-readable-p file))
       (etaf-reader--call-in session
                             (lambda () (etaf-reader--open-path session file))))
-     ((and (null (etaf-reader-store-books))
+     ((and (null (etaf-reader--read session :books))
            (seq-some #'file-directory-p etaf-reader-library-directories))
       (etaf-reader--call-in session
                             (lambda () (etaf-reader-refresh-library session)))))
