@@ -27,7 +27,8 @@ internal.
 2. Opening a book imports it when its chapter rows are missing: the parser
    writes a manifest and one JSON file per chapter into a per-book cache
    directory (images included), and the store receives one `chapters` row
-   (metadata) and one `contents` row (text + blocks JSON) per chapter.
+   (metadata) and one `contents` row (text + blocks JSON) per chapter,
+   written as one batched transaction per table.
 3. The model loads one chapter at a time, wraps its block text into lines for
    the current column count, and publishes refs: chapter, lines, annotations,
    selection, position. Views read those refs during render, so a command

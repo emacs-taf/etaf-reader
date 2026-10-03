@@ -18,6 +18,11 @@
 
 ### Performance
 
+- Opening a long book writes all chapters as one batch per table instead of
+  one Controller mutation per row: a synthetic 1000-chapter import dropped
+  from 7.7 s to 0.064 s, and a 1692-chapter 28 MB EPUB imported end to end in
+  5.6 s in a GUI session (extraction included).
+
 - Page turns go through ETAF's retained Host boundary when the published page
   and the new page are plain body text: one `etaf-runtime-update-host-contents`
   batch replaces the visible line texts and the status labels (measured 27 ms
