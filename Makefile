@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := check
 .NOTPARALLEL:
 EMACS ?= emacs
-LOAD_PATH = -L . -L lisp -L tests -L ../../etaf -L ../../etaf-ui -L ../../etaf-db -L ../../ebox -L ../../ecss
+PROVIDER_ROOT ?= $(if $(wildcard ../etaf/etaf.el),..,../..)
+LOAD_PATH = -L . -L lisp -L tests $(foreach package,etaf etaf-ui etaf-db ebox ecss,-L $(PROVIDER_ROOT)/$(package))
 SOURCES = lisp/etaf-reader-theme.el lisp/etaf-reader-store.el
 SOURCES += lisp/etaf-reader-library.el lisp/etaf-reader-model.el
 SOURCES += lisp/etaf-reader-navigation.el lisp/etaf-reader-views.el

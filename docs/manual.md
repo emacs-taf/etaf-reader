@@ -101,6 +101,27 @@ Pass `:parser` to `etaf-reader-create` to drive the same reader from another
 backend; it is a plist with `:scan` (directory -> `(:books ... :failed N)`)
 and `:extract` (path, output directory -> `(:out ...)`) functions.
 
+## Performance verification
+
+From the enclosing workspace, run the maintained keyboard workload with the
+shared driver:
+
+```sh
+python3 scripts/performance.py run --mode batch \
+  --load-path etaf-apps/etaf-reader \
+  --scenario-file etaf-apps/etaf-reader/benchmarks/performance-scenarios.el \
+  --scenario reader.page.styled --sets 3 --samples 30 --warmups 5
+```
+
+The workload uses the available viewport rows and verifies every visible line
+and the annotation's underline. `--diagnose` adds separate provider, CPU and
+allocation passes. Keep the baseline `result.json` and compare with
+`--baseline`; a faster comparison is not a pass if the absolute budget fails.
+Batch results do not certify graphical latency. For isolated validation builds,
+`make check PROVIDER_ROOT=/path/to/providers` selects sibling provider snapshots
+without rebuilding or editing another working copy. Normal builds discover the
+workspace or standalone sibling layout automatically.
+
 ## GUI verification
 
 The maintained `scripts/etaf-reader-gui-scenarios.el` uses ETAF's

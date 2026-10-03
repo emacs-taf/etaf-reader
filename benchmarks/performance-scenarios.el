@@ -43,6 +43,8 @@
 
 (defun etaf-reader-benchmark--setup (_mode)
   "Create a mounted reader with isolated data and return its driver fixture."
+  (when (get-buffer "*ETAF Reader*")
+    (error "Close the reader in the dedicated benchmark instance before running"))
   (let* ((root (make-temp-file "reader-benchmark-" t))
          (store (expand-file-name "library.sqlite3" root))
          (cache (expand-file-name "cache" root))
@@ -51,14 +53,18 @@
          (etaf-reader-cache-directory cache)
          (etaf-reader-library-directories (list root))
          (session (etaf-reader-create :parser (etaf-reader-benchmark--parser file)))
-         buffer)
+         buffer rows quote)
     (with-temp-file file (insert "fixture"))
     (etaf-reader-refresh-library session)
     (etaf-reader-open-book session (car (etaf-reader-books session)))
     (setq buffer (etaf-reader-open session))
-    (etaf-reader-set-metrics session 40 24 1 'medium 'page)
+    (setq rows (max 4 (- (window-body-height (get-buffer-window buffer t)) 7)))
+    (etaf-reader-set-metrics session 40 rows 1 'medium 'page)
     (etaf-reader-begin-selection session 5 0)
     (etaf-reader-extend-selection session 5 8)
+    (setq quote (etaf-reader-selection-text session))
+    (unless (and quote (not (string-empty-p quote)))
+      (error "Reader workload did not select annotation text"))
     (etaf-reader-annotate session "wavy" "red")
     (etaf-reader-clear-selection session)
     (list
@@ -72,14 +78,38 @@
      (lambda ()
        (let* ((state (etaf-reader-state session))
               (top (plist-get state :line))
-              (line (nth top (etaf-reader-lines session)))
-              (text (string-trim (or (plist-get line :text) ""))))
+              (visible (with-current-buffer buffer
+                         (buffer-substring-no-properties (point-min) (point-max)))))
          (if (and (= (plist-get state :chapter) 0)
-                  (memq top '(0 24))
-                  (with-current-buffer buffer
-                    (string-match-p (regexp-quote text)
-                                    (buffer-substring-no-properties (point-min) (point-max)))))
-             t "Reader page and visible text disagree")))
+                  (memq top (list 0 rows))
+                  (cl-every (lambda (line)
+                              (string-match-p (regexp-quote (string-trim (or (plist-get line :text) "")))
+                                              visible))
+                            (seq-take (nthcdr top (etaf-reader-lines session)) rows))
+                  (or (/= top 0)
+                      (with-current-buffer buffer
+                        (save-excursion
+                          (goto-char (point-min))
+                          (when (search-forward quote nil t)
+                            (let* ((face (get-text-property (- (point) (length quote)) 'face))
+                                   (faces (if (keywordp (car-safe face)) (list face) face)))
+                              (seq-some (lambda (f) (plist-get f :underline)) faces)))))))
+             t "Reader page, annotation and visible text disagree")))
+     :observe
+     (lambda (sink)
+       (let ((runtime (etaf-runtime-for-buffer buffer)))
+         (etaf-performance-clear)
+         (etaf-performance-start runtime)
+         (lambda ()
+           (etaf-performance-stop runtime)
+           (dolist (operation (plist-get (etaf-performance-report-data) :operations))
+             (when (equal (plist-get operation :buffer-name) (buffer-name buffer))
+               (dolist (stage (plist-get operation :stages))
+                 (funcall sink
+                          (append (list :provider (plist-get stage :provider)
+                                        :stage (plist-get stage :stage)
+                                        :duration-ms (plist-get stage :duration-ms))
+                                  (plist-get stage :metadata)))))))))
      :cleanup
      (lambda ()
        (let ((etaf-reader-store-file store) (etaf-reader-cache-directory cache))
@@ -88,7 +118,7 @@
        (delete-directory root t)))))
 
 (taf-benchmark-register
- "reader.page.styled" :version 1 :modes '(batch gui) :budget-ms 16
+ "reader.page.styled" :version 2 :modes '(batch gui) :budget-ms 16
  :impact 'local :isolation 'series
  :description "Keyboard page turns between a marked heading page and prose"
  :setup #'etaf-reader-benchmark--setup)
