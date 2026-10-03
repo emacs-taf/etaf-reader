@@ -33,8 +33,10 @@ internal.
    the current column count, and publishes refs: chapter, lines, annotations,
    selection, position. Views read those refs during render, so a command
    repaints without a remount.
-4. Page turns and selection changes only write refs; position and reading time
-   are written to the `states` table on a trailing timer and on close.
+4. Page turns update the plain position and publish each column's styled text
+   through ETAF's retained content API. Selection and structural changes publish
+   reactive Views. Position and reading time are saved on a trailing timer and
+   on close; the timer retains the originating store path.
 
 ## Invariants
 
@@ -59,23 +61,27 @@ only re-run when the column count changes or a chapter is opened. The shelf
 reads cached states from one hash table instead of one query per row. The
 windowed render keeps the node count constant regardless of chapter size.
 
-Two publication paths exist, and the difference is measured:
+Each reading column owns one retained Text Host. Caller-owned string faces
+carry headings, inline emphasis, highlights and underlines; source-coordinate
+properties preserve selection across two physical columns. A turn replaces the
+column strings and one position label in a single
+`etaf-runtime-update-host-contents` publication. Empty rows contain a space,
+keeping final-page columns addressable and removing the previous page's text.
+There is no fixed limit on the number of styled segments in a line.
 
-- A plain-body page turn replaces the visible line texts and the status labels
-  through `etaf-runtime-update-host-contents`, one retained Ebox publication.
-  Measured at 27 ms for 90 line slots plus the page and percent labels on a
-  GPU frame, with no garbage collection in the sample.
-- Anything the retained path cannot patch -- a page with a heading, an
-  annotation or an active selection -- falls back to an ordinary ETAF
-  publication.  That currently costs ~400 ms per turn on the same frame, which
-  is the framework's whole-view publication cost, not a reader defect.  The
-  fast path is skipped deliberately rather than applied partially, because a
-  retained content update replaces only text strings.
+The reading surface owns one drag handler, not one keymap per line. When the
+selection toolbar opens, the ordinary View temporarily exposes individual line
+anchors for the shared Popover. Closing it restores the compact column tree.
+Open dialogs and toolbars use ordinary publication; unexpected retained errors
+are reported, not silently hidden by a full repaint. A rejected turn restores
+the authoritative position.
 
-The `:line` position is a plain session field so the fast path can move the
-window without triggering a reactive publication; `:revision` is the explicit
-repaint trigger, and `:published-line` records which page the retained Hosts
-belong to.  Keep those three in sync when changing the reading Views.
+The `:line` position is plain session state; `:revision` explicitly requests an
+ordinary repaint. Views no longer write a speculative published-page marker.
+The maintained `reader.page.styled` workload in
+`benchmarks/performance-scenarios.el` drives actual page keys and checks visible
+text. Run it through the workspace performance driver; batch results do not
+certify graphical interaction latency.
 
 ## Dependencies
 

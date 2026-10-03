@@ -12,6 +12,11 @@
   "support": [],
   "cases": [
     {
+      "name": "etaf-reader-tests-mounted-styled-pages-and-final-page",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Mounted one- and two-column turns preserve heading and annotation faces, render the final partial page, and continue through the keyboard after resizing."
+    },
+    {
       "name": "etaf-reader-tests-headless-session-starts-on-shelf",
       "file": "tests/etaf-reader-tests.el",
       "purpose": "A session built without a buffer starts on the shelf and needs no window or backend."

@@ -13,8 +13,11 @@
 - Line kinds are real symbols (`body`, `heading`, `quote`, `pre`), so headings
   render bold, quotes get their bar, and the page-turn fast path can classify
   a window.
-- An explicit repaint is tracked by the View, and the published page is
-  recorded so the retained text Hosts always match the page they belong to.
+- Final partial pages clear unused rows instead of keeping stale text. Source
+  coordinates follow their text across both columns; selection no longer
+  mistakes physical buffer rows for chapter lines.
+- Reading columns leave space for the footer, and light/sepia text uses the
+  matching foreground. Deferred progress saves retain their originating store.
 
 ### Performance
 
@@ -23,13 +26,11 @@
   from 7.7 s to 0.064 s, and a 1692-chapter 28 MB EPUB imported end to end in
   5.6 s in a GUI session (extraction included).
 
-- Page turns go through ETAF's retained Host boundary when the published page
-  and the new page are plain body text: one `etaf-runtime-update-host-contents`
-  batch replaces the visible line texts and the status labels (measured 27 ms
-  for 90 line slots plus the page and percent labels, against ~400 ms for a
-  whole-view publication).  A page that contains a heading, an annotation or a
-  selection falls back to one ordinary publication.  Closing the remaining gap
-  (every such fallback page) is tracked as follow-up work.
+- Heading and annotated pages now use retained content updates too: each
+  column is one styled text Host, rather than a subtree per line/segment.
+  Selection toolbars temporarily restore line anchors. This removes the
+  unconditional whole-view fallback for styled pages; latency must still be
+  verified with the maintained keyboard workload on the target display.
 
 ### Added
 

@@ -37,13 +37,6 @@
 ;;; Line segments
 ;;; ---------------------------------------------------------------------------
 
-(defun etaf-reader--span-covering (spans position)
-  "Return the span in SPANS covering POSITION, or nil."
-  (cl-find-if (lambda (span)
-                (and (<= (plist-get span :from) position)
-                     (< position (plist-get span :to))))
-              spans))
-
 (defun etaf-reader--segment-style (styles from to)
   "Return the run styles covering STYLES interval FROM..TO."
   (let ((result ""))
@@ -70,6 +63,9 @@
                     (push from boundaries)
                     (push to boundaries)
                     (push (append (list :from from :to to) props) spans))))
+      (dolist (style styles)
+        (push (max 0 (min length (nth 0 style))) boundaries)
+        (push (max 0 (min length (nth 1 style))) boundaries))
       (dolist (annotation annotations)
         (let* ((a-start (max start (or (plist-get annotation :start) 0)))
                (a-end (min end (or (plist-get annotation :end) 0))))
@@ -93,13 +89,18 @@
           (let* ((from (car items))
                  (to (cadr items))
                  (middle (/ (+ from to) 2.0))
-                 (span (etaf-reader--span-covering spans middle))
-                 (annotation (plist-get span :annotation))
+                 (covering (cl-remove-if-not
+                            (lambda (span)
+                              (and (<= (plist-get span :from) middle)
+                                   (< middle (plist-get span :to)))) spans))
+                 (annotation (seq-some (lambda (span) (plist-get span :annotation))
+                                       covering))
                  (kind (and annotation (or (plist-get annotation :kind) "highlight")))
                  (color (and annotation (or (plist-get annotation :color) "yellow")))
                  (style (etaf-reader--segment-style styles from to))
-                 (caret (plist-get span :caret))
-                 (selection-p (plist-get span :selection))
+                 (caret (seq-some (lambda (span) (plist-get span :caret)) covering))
+                 (selection-p (seq-some (lambda (span) (plist-get span :selection))
+                                        covering))
                  (fill (cond (caret :accent)
                              (selection-p :sel)
                              ((equal kind "highlight")
@@ -130,6 +131,8 @@
         (if (and previous
                  (equal (plist-get previous :fill) (plist-get segment :fill))
                  (equal (plist-get previous :decoration) (plist-get segment :decoration))
+                 (equal (plist-get previous :decoration-style)
+                        (plist-get segment :decoration-style))
                  (equal (plist-get previous :bold) (plist-get segment :bold))
                  (equal (plist-get previous :italic) (plist-get segment :italic))
                  (equal (plist-get previous :color) (plist-get segment :color))
@@ -139,72 +142,51 @@
           (push segment result))))
     (nreverse result)))
 
-(defun etaf-reader--segment-node (session segment theme)
-  "Return the text node of SEGMENT for SESSION."
-  (let ((props nil)
-        (annotation (plist-get segment :annotation)))
-    (when-let* ((fill (plist-get segment :fill)))
-      (setq props (plist-put props :background-color
-                             (etaf-reader-color fill theme))))
-    (when-let* ((color (plist-get segment :color)))
-      (setq props (plist-put props :color (etaf-reader-color color theme))))
-    (when (plist-get segment :bold)
-      (setq props (plist-put props :font-weight 'bold)))
-    (when (plist-get segment :italic)
-      (setq props (plist-put props :font-style 'italic)))
-    (when-let* ((decoration (plist-get segment :decoration)))
-      (setq props (plist-put props :text-decoration-line '(underline)))
-      (setq props (plist-put props :text-decoration-style
-                             (or (plist-get segment :decoration-style) 'solid)))
-      (setq props (plist-put props :text-decoration-color
-                             (etaf-reader-color decoration theme))))
-    (when annotation
-      (setq props (plist-put props :help-echo "点击编辑标注"))
-      (setq props (plist-put props :on-press
-                             (lambda ()
-                               (etaf-reader-show-annotation-toolbar
-                                session (plist-get annotation :id))))))
-    (etaf-node 'text props (list (plist-get segment :text)))))
+(defun etaf-reader--line-content (session line theme)
+  "Return LINE's styled text and source coordinates for SESSION.
+Caller-owned string properties travel through ETAF's public text boundary;
+no buffer writes or separate paint layer are involved.  One nonempty Text
+Host per slot also keeps blank and final-page slots addressable."
+  (let ((kind (plist-get line :kind)) pieces)
+    (dolist (segment (etaf-reader--line-segments session line theme))
+      (let ((text (copy-sequence (plist-get segment :text))) face)
+        (when (or (eq kind 'heading) (plist-get segment :bold))
+          (setq face (plist-put face :weight 'bold)))
+        (when (plist-get segment :italic)
+          (setq face (plist-put face :slant 'italic)))
+        (when-let* ((fill (plist-get segment :fill)))
+          (setq face (plist-put face :background (etaf-reader-color fill theme))))
+        (when-let* ((color (or (plist-get segment :color)
+                              (and (eq kind 'hr) :dim))))
+          (setq face (plist-put face :foreground (etaf-reader-color color theme))))
+        (when-let* ((decoration (plist-get segment :decoration)))
+          (setq face
+                (plist-put face :underline
+                           (list :color (etaf-reader-color decoration theme)
+                                 :style (pcase (plist-get segment :decoration-style)
+                                          ('wavy 'wave) ('dotted 'dots) (_ 'line))))))
+        (when face (put-text-property 0 (length text) 'face face text))
+        (when-let* ((annotation (plist-get segment :annotation)))
+          (add-text-properties 0 (length text)
+                               (list 'reader-annotation (plist-get annotation :id)
+                                     'help-echo "点击查看或编辑标注") text))
+        (push text pieces)))
+    (let ((text (apply #'concat (nreverse pieces))))
+      (when (string-empty-p text) (setq text " "))
+      (when (plist-get line :key)
+        (put-text-property 0 (length text) 'reader-line (plist-get line :key) text))
+      text)))
 
 (defun etaf-reader--view-line (session line theme)
-  "Return the View of one wrapped LINE."
-  (let* ((segments (etaf-reader--line-segments session line theme))
-         (nodes (mapcar (lambda (segment)
-                          (etaf-reader--segment-node session segment theme))
-                        segments))
-         (kind (plist-get line :kind)))
+  "Return one fixed, retained line slot for LINE."
+  (let* ((slot (or (plist-get line :slot) 0))
+         (id (format "reader-text-%d" slot)))
     (etaf-node
      'box
-     (list :id (format "reader-line-%d" (or (plist-get line :slot) 0))
-           :width 'stretch
-           :height '(lh 1)
-           :overflow 'hidden
-           :wrap-mode 'none
-           :font-weight (if (eq kind 'heading) 'bold nil)
-           :color (when (eq kind 'hr) :dim)
-           :pointer 'text
-           ;; One session-wide closure keeps the retained Behavior stable; a
-           ;; fresh lambda per line would rebuild every line each render.
-           :on-drag (plist-get session :drag-handler))
-     (cond
-      ((and (= (length segments) 1)
-            (let ((segment (car segments)))
-              (and (null (plist-get segment :fill))
-                   (null (plist-get segment :decoration))
-                   (null (plist-get segment :bold))
-                   (null (plist-get segment :italic))
-                   (null (plist-get segment :color))
-                   (null (plist-get segment :annotation)))))
-       ;; A plain line is one retained text Host: the page-turn fast path
-       ;; replaces this string without an ordinary publication.
-       (list (etaf-node 'text
-                        (list :ref (intern (format "reader-text-%d"
-                                                   (or (plist-get line :slot) 0)))
-                              :id (format "reader-text-%d"
-                                          (or (plist-get line :slot) 0)))
-                        (list (or (plist-get (car segments) :text) "")))))
-      (t
-       (or nodes (list (etaf-node 'text nil (list "")))))))))
+     (list :key slot :id (format "reader-line-%d" slot)
+           :width 'stretch :height '(lh 1) :overflow 'hidden :wrap-mode 'none)
+     (list (etaf-node 'text (list :ref (intern id) :id id)
+                      (list (etaf-reader--line-content session line theme)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Selection toolbar
@@ -230,6 +212,7 @@
              (top (etaf-reader--read session :line))
              (metrics (etaf-reader--read session :metrics))
              (rows (max 1 (or (plist-get metrics :rows) 20)))
+             (page-size (* rows (or (plist-get metrics :spread) 1)))
              (annotation (plist-get toolbar :annotation))
              (closing (lambda () (etaf-reader--write session :toolbar nil)))
              (mark
@@ -280,12 +263,12 @@
                  session
                  (lambda ()
                    (etaf-reader-annotation-delete session (plist-get annotation :id)))))))
-        (when (and (>= line top) (< (- line top) rows))
+        (when (and (>= line top) (< (- line top) page-size))
           (etaf-view
            (etaf-popover
                :open t
                :anchor (format "reader-line-%d" (- line top))
-               :placement (if (< (- line top) (/ rows 2)) 'bottom-start 'top-start)
+               :placement (if (< (% (- line top) rows) (/ rows 2)) 'bottom-start 'top-start)
                :width '(ch 46)
                :on-close closing
              (column :width 'stretch :item-gap '(lh 0) :padding '((lh 0) (ch 1))
@@ -355,21 +338,21 @@
          (page-size (* rows spread))
          ;; Slots give every rendered line a stable identity across page
          ;; turns, so Ebox reuses the nodes and only patches their text.
-         (visible (cl-loop for line in (seq-subseq lines top
-                                                  (min total (+ top page-size)))
-                           for slot from 0
-                           collect (let ((copy (copy-sequence line)))
-                                     (plist-put copy :slot slot))))
+         (remaining (nthcdr top lines))
+         (visible (cl-loop for slot below page-size
+                           for line = (pop remaining)
+                           collect (plist-put (copy-sequence line) :slot slot)))
          (slices (etaf-reader--column-slices visible rows spread))
          (chapter (etaf-reader--read session :chapter))
          (book (etaf-reader--read session :book))
          )
     (etaf-view
-     (column :width 'stretch :height 'stretch
-             :background-color (etaf-reader-color :bg theme)
-             :item-gap '(lh 0)
+     (flex :flex-direction 'column :width 'stretch :height 'stretch
+           :background-color (etaf-reader-color :bg theme)
+           :color (etaf-reader-color :ink theme) :gap '((lh 0) (ch 0))
        ;; Running head
-       (flex :width 'stretch :height '(lh 2) :padding '((lh 0) (ch 2))
+       (flex :width 'stretch :height '(lh 2) :flex-shrink 0
+             :padding '((lh 0) (ch 2))
              :align-items 'center :gap '((lh 0) (ch 2))
          (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0) :height '(lh 1)
               :overflow 'hidden :font-weight 'bold
@@ -380,34 +363,49 @@
                                (length (etaf-reader--read session :chapters))
                                (or (plist-get chapter :title) ""))))))
        ;; Body
-       (flex :width 'stretch :height 'stretch :align-items 'stretch
+       (flex :ref 'reader-body :id "reader-body"
+             :width 'stretch :flex-grow 1 :flex-basis '(lh 0)
+             :min-height '(lh 0) :align-items 'stretch
+             :pointer 'text :on-drag (plist-get session :drag-handler)
              :gap (list '(lh 0) (list 'ch 2))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0))
          (column :for (slice slices) :key (plist-get (car slice) :slot)
                  ;; One cell of slack absorbs sub-cell rounding.
                  :width (list 'ch (+ columns 1)) :flex-shrink 0
                  :item-gap '(lh 0) :padding '((lh 1) (ch 0))
-           (box :for (line slice) :key (plist-get line :slot)
-                :width 'stretch :height '(lh 1) :overflow 'hidden
-             (expr (etaf-reader--view-line session line theme))))
+           (expr
+            (if (etaf-reader--read session :toolbar)
+                ;; Line anchors exist only while the nearby toolbar needs one.
+                (mapcar (lambda (line)
+                          (etaf-reader--view-line session line theme)) slice)
+              (let ((id (format "reader-column-%d"
+                                (/ (plist-get (car slice) :slot) rows))))
+                (etaf-node
+                 'box (list :width 'stretch :height (list 'lh rows)
+                            :overflow 'hidden :wrap-mode 'none)
+                 (list (etaf-node
+                        'text (list :ref (intern id) :id id)
+                        (list (mapconcat
+                               (lambda (line)
+                                 (etaf-reader--line-content session line theme))
+                               slice "\n")))))))))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0)))
        ;; Status line
-       (flex :width 'stretch :height '(lh 2) :padding '((lh 0) (ch 2))
+       (flex :width 'stretch :height '(lh 2) :flex-shrink 0
+             :padding '((lh 0) (ch 2))
              :align-items 'center :gap '((lh 0) (ch 2))
              :border-top (list '(px 1) 'solid (etaf-reader-color :line theme))
          (box :height '(lh 1) :color (etaf-reader-color :muted theme)
            (text :ref 'reader-page :id "reader-page"
-                 (expr (etaf-reader--page-label session))))
+                 (expr (concat (etaf-reader--page-label session) " · "
+                               (etaf-reader-percent-text session)))))
          (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0) :height '(lh 1)
               :overflow 'hidden :text-align 'center
               :color (etaf-reader-color :dim theme)
            (text (expr (or (etaf-reader--read session :message)
                            (if (eq layout 'wide)
                                "空格 翻页 · h/l 选字 · v 选择 · s 搜索 · c 目录 · a 笔记 · ? 帮助"
-                             "空格翻页 · v 选择 · s 搜索 · c 目录 · ? 帮助")))))
-         (box :height '(lh 1) :color (etaf-reader-color :accent theme)
-           (text :ref 'reader-percent :id "reader-percent"
-                 (expr (etaf-reader-percent-text session)))))))))
+                             "空格翻页 · v 选择 · s 搜索 · c 目录 · ? 帮助"))))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Shelf
@@ -585,9 +583,6 @@
   ;; Track the repaint trigger: commands that cannot use the retained fast
   ;; path bump it to force an ordinary publication.
   (etaf-reader--read session :revision)
-  ;; Record which page this publication renders: the retained text Hosts only
-  ;; exist for the slots of this page, so the fast path checks against it.
-  (plist-put session :published-line (etaf-reader--read session :line))
   (let ((view (etaf-reader--read session :view)))
     (etaf-node
      'fragment

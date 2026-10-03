@@ -57,7 +57,7 @@
       (setq index (1+ index)))
     (nreverse blocks)))
 
-(defun etaf-reader-tests--parser (root)
+(defun etaf-reader-tests--parser (root &optional heading)
   "Return a scripted parser whose single book lives under ROOT."
   (let ((book-path (expand-file-name "fake-book.epub" root))
         (chapters etaf-reader-tests--chapters))
@@ -81,7 +81,10 @@
                (insert (json-encode
                         (list :index index :title (nth 0 chapter)
                               :chars (length text) :text text
-                              :blocks (etaf-reader-tests--blocks text)))))
+                              :blocks (let ((blocks (etaf-reader-tests--blocks text)))
+                                        (when heading
+                                          (setcdr (assq :type (car blocks)) "h1"))
+                                        blocks)))))
              (push (list (cons :index index) (cons :title (nth 0 chapter))
                          (cons :chars (length text)) (cons :file file))
                    entries)
@@ -327,6 +330,49 @@
             (should (= (length (etaf-reader-books session)) 1))
             (etaf-reader-set-filter session 'all)
             (should (= (length (etaf-reader-books session)) 1)))
+        (delete-directory folder t)))))
+
+(ert-deftest etaf-reader-tests-mounted-styled-pages-and-final-page ()
+  "Mounted turns preserve titles, annotations and blank final-page slots."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-mounted-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create :parser (etaf-reader-tests--parser folder t))))
+           buffer quote)
+      (unwind-protect
+          (save-window-excursion
+            (setq buffer (etaf-reader-open session))
+            (etaf-reader-set-metrics session 24 4 2 'wide 'page)
+            (let* ((lines (etaf-reader-lines session))
+                   (marked (cl-position-if
+                            (lambda (line) (> (- (plist-get line :end)
+                                                (plist-get line :start)) 8)) lines)))
+              (etaf-reader-begin-selection session marked 0)
+              (etaf-reader-extend-selection session marked 6)
+              (setq quote (etaf-reader-selection-text session))
+              (etaf-reader-annotate session "wavy" "red"))
+            (dolist (top (list 8 0 (1- (length (etaf-reader-lines session))) 0))
+              (etaf-reader-goto-line session top)
+              (should (= top (plist-get (etaf-reader-state session) :line)))
+              (let ((expected (string-trim
+                               (plist-get (nth top (etaf-reader-lines session)) :text))))
+                (with-current-buffer buffer
+                  (should (string-match-p (regexp-quote expected)
+                                          (buffer-substring-no-properties
+                                           (point-min) (point-max)))))))
+            (with-current-buffer buffer
+              (goto-char (point-min))
+              (should (search-forward quote nil t))
+              (let* ((face (get-text-property (- (point) (length quote)) 'face))
+                     (faces (if (keywordp (car-safe face)) (list face) face)))
+                (should (seq-some (lambda (f) (eq (plist-get f :weight) 'bold)) faces))
+                (should (seq-some (lambda (f) (plist-get f :underline)) faces))))
+            ;; A resize followed by a turn uses the newly published column count.
+            (etaf-reader-set-metrics session 32 4 1 'medium 'page)
+            (with-current-buffer buffer (execute-kbd-macro (kbd "SPC")))
+            (should (= 4 (plist-get (etaf-reader-state session) :line))))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
         (delete-directory folder t)))))
 
 (provide 'etaf-reader-tests)

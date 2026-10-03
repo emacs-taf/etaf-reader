@@ -26,6 +26,8 @@
 (require 'etaf-reader-store)
 (require 'etaf-reader-library)
 
+(declare-function etaf-reader--line-content "etaf-reader-views" (session line theme))
+
 (defcustom etaf-reader-font-size nil
   "Optional text size override (CSS pixels) for the reading column."
   :type '(choice (const :tag "Theme default" nil) integer)
@@ -108,7 +110,6 @@ PARSER defaults to the `ebook-parse' backend; THEME defaults to
                   :book-notes (etaf-ref nil :name 'etaf-reader-book-notes)
                   :lines (etaf-ref nil :name 'etaf-reader-lines)
                   :line 0
-                  :published-line 0
                   :revision (etaf-ref 0 :name 'etaf-reader-revision)
                   :mode (etaf-ref 'page :name 'etaf-reader-mode)
                   :metrics (etaf-ref (list :columns 40 :rows 20 :spread 1
@@ -454,31 +455,6 @@ stored annotations of that chapter index."
   "Clamp LINE to SESSION's current chapter."
   (max 0 (min (max 0 (1- (length (etaf-reader--read session :lines)))) line)))
 
-(defun etaf-reader--plain-window-p (session top)
-  "Return non-nil when the window at TOP renders as plain body lines.
-The retained fast path can only patch text: any styled line, annotation,
-selection or caret in the old or new window needs an ordinary publication."
-  (let* ((lines (etaf-reader--read session :lines))
-         (metrics (etaf-reader--read session :metrics))
-         (page-size (max 1 (* (or (plist-get metrics :rows) 20)
-                              (or (plist-get metrics :spread) 1))))
-         (window (seq-subseq lines (min top (length lines))
-                             (min (length lines) (+ top page-size)))))
-    (and window
-         (null (etaf-reader--read session :selection))
-         (null (etaf-reader--read session :cursor))
-         (cl-every (lambda (line)
-                     (and (eq (plist-get line :kind) 'body)
-                          (null (plist-get line :styles))))
-                   window)
-         (null (seq-some
-                (lambda (annotation)
-                  (let ((start (or (plist-get (car window) :start) 0))
-                        (end (or (plist-get (car (last window)) :end) 0)))
-                    (and (< (or (plist-get annotation :start) 0) end)
-                         (> (or (plist-get annotation :end) 0) start))))
-                (etaf-reader--read session :annotations))))))
-
 (defun etaf-reader--display-window (session)
   "Replace the visible line texts and status through retained Hosts.
 Return non-nil when the retained update committed; nil when the caller must
@@ -488,51 +464,43 @@ publish ordinarily instead."
          (lines (etaf-reader--read session :lines))
          (metrics (etaf-reader--read session :metrics))
          (top (etaf-reader--read session :line))
-         (page-size (max 1 (* (or (plist-get metrics :rows) 20)
-                              (or (plist-get metrics :spread) 1))))
-         (window (seq-subseq lines (min top (length lines))
-                             (min (length lines) (+ top page-size))))
-         (slot 0))
-    (when (and runtime
-               (etaf-runtime-mounted-p runtime)
-               ;; The caller checked that the published structure matches the
-               ;; page the slots came from; the new page must fit exactly.
-               (>= (- (length lines) top) page-size)
-               (etaf-reader--plain-window-p session top))
-      (let ((updates (list (cons 'reader-page (etaf-reader--page-label session))
-                           (cons 'reader-percent (etaf-reader-percent-text session)))))
-        (dolist (line window)
-          (push (cons (intern (format "reader-text-%d" slot))
-                      (or (plist-get line :text) ""))
-                updates)
-          (setq slot (1+ slot)))
-        (while (< slot page-size)
-          (push (cons (intern (format "reader-text-%d" slot)) "") updates)
-          (setq slot (1+ slot)))
-        ;; A page whose published structure carries a styled line has slots
-        ;; without a retained text Host; the batch then rejects every target
-        ;; before applying any.  Report that as "no fast path" so the caller
-        ;; repaints, which rebuilds the refs for the new page.
-        (condition-case nil
-            (progn
-              (etaf-runtime-update-host-contents runtime updates)
-              (plist-put session :published-line top)
-              t)
-          (etaf-runtime-error nil))))))
+         (rows (max 1 (or (plist-get metrics :rows) 20)))
+         (spread (max 1 (or (plist-get metrics :spread) 1)))
+         (window (nthcdr top lines))
+         (theme (etaf-reader--read session :theme)))
+    (when (and runtime (etaf-runtime-mounted-p runtime)
+               (eq (etaf-reader--read session :view) 'reader)
+               (null (etaf-reader--read session :pane))
+               (null (etaf-reader--read session :toolbar)))
+      (let ((updates (list (cons 'reader-page
+                                 (concat (etaf-reader--page-label session) " · "
+                                         (etaf-reader-percent-text session))))))
+        (dotimes (column spread)
+          (push (cons (intern (format "reader-column-%d" column))
+                      (mapconcat
+                       #'identity
+                       (cl-loop repeat rows
+                                collect (etaf-reader--line-content
+                                         session (pop window) theme))
+                       "\n"))
+                updates))
+        (etaf-runtime-update-host-contents runtime updates)
+        t))))
 
 (defun etaf-reader-goto-line (session line)
   "Move SESSION's top line to LINE.
-A mounted reader moves the visible window through retained Hosts when both the
-old and the new window are plain body text; anything else repaints once."
+Mounted pages use fixed retained text slots, including titles and annotations.
+An open dialog or toolbar instead receives an ordinary publication."
   (let* ((line (etaf-reader--clamp-line session line))
-         (previous (etaf-reader--read session :line))
-         (published (plist-get session :published-line)))
+         (previous (etaf-reader--read session :line)))
     (unless (equal previous line)
       (etaf-reader--write session :line line)
-      (unless (and (equal previous published)
-                   (etaf-reader--plain-window-p session published)
-                   (etaf-reader--display-window session))
-        (etaf-reader-repaint session)))
+      (condition-case error-data
+          (unless (etaf-reader--display-window session)
+            (etaf-reader-repaint session))
+        (error
+         (etaf-reader--write session :line previous)
+         (signal (car error-data) (cdr error-data)))))
     (etaf-reader-schedule-save session)))
 
 (defun etaf-reader-next-page (session)
@@ -1005,11 +973,18 @@ publication, where touching a Data Controller is a render side effect."
   (when (plist-get session :buffer)
     (when-let* ((timer (plist-get session :save-timer)))
       (cancel-timer timer))
-    (plist-put session :save-timer
-               (run-at-time etaf-reader-save-delay nil
-                            (lambda ()
-                              (plist-put session :save-timer nil)
-                              (ignore-errors (etaf-reader-save-now session)))))))
+    (let ((store-file etaf-reader-store-file))
+      (plist-put session :save-timer
+                 (run-at-time etaf-reader-save-delay nil
+                              (lambda ()
+                                (let ((etaf-reader-store-file store-file))
+                                  (plist-put session :save-timer nil)
+                                  (condition-case error-data
+                                      (etaf-reader-save-now session)
+                                    (error
+                                     (etaf-reader-message
+                                      session (format "保存失败：%s"
+                                                      (error-message-string error-data))))))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Notes export
@@ -1063,21 +1038,19 @@ publication, where touching a Data Controller is a render side effect."
 
 (defun etaf-reader--gesture-point (session gesture)
   "Return the (LINE . CHAR) a drag GESTURE points at, or nil.
-Line numbers are global to the current chapter; the rendered window starts at
-session's top line, and every rendered line is one buffer line."
+Source coordinates are carried by the displayed text, so two columns and
+prefixes do not get confused with physical buffer lines."
+  (ignore session)
   (let* ((buffer (plist-get gesture :buffer))
          (event (plist-get gesture :event))
          (position (and event (posn-point (event-start event)))))
     (when (and (buffer-live-p buffer) (integerp position))
       (with-current-buffer buffer
-        (let ((runtime (etaf-runtime-for-buffer buffer)))
-          (when runtime
-            (when-let* ((base (ignore-errors
-                               (etaf-host-ref-position runtime "reader-line-0"))))
-              (cons (+ (etaf-reader--read session :line)
-                       (- (line-number-at-pos position)
-                          (line-number-at-pos base)))
-                    (- position (line-beginning-position))))))))))
+        (when (and (<= (point-min) position) (< position (point-max)))
+          (when-let* ((line (get-text-property position 'reader-line)))
+            (cons line (- position
+                          (previous-single-property-change
+                           (1+ position) 'reader-line nil (point-min))))))))))
 
 (defun etaf-reader--drag (session gesture)
   "Handle a native drag GESTURE for SESSION's text selection."
@@ -1091,7 +1064,14 @@ session's top line, and every rendered line is one buffer line."
          (when (eq (plist-get gesture :phase) 'end)
            (if (etaf-reader-selection session)
                (etaf-reader-show-toolbar session)
-             (etaf-reader-clear-selection session))))))))
+             (etaf-reader-clear-selection session)
+             (let* ((event (plist-get gesture :event))
+                    (position (and event (posn-point (event-start event))))
+                    (buffer (plist-get gesture :buffer))
+                    (id (and (buffer-live-p buffer) (integerp position)
+                             (with-current-buffer buffer
+                               (get-text-property position 'reader-annotation)))))
+               (when id (etaf-reader-show-annotation-toolbar session id))))))))))
 
 (defun etaf-reader-show-toolbar (session)
   "Show the selection toolbar anchored at the selection's first line."
