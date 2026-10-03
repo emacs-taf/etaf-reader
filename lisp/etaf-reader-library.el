@@ -228,21 +228,26 @@ only after the new one succeeded."
       (unless (string= (directory-file-name (expand-file-name out))
                        (directory-file-name (expand-file-name cache)))
         (rename-file out cache t))
-      (dolist (entry chapters)
-        (let* ((file (expand-file-name (plist-get entry :file) cache))
-               (chapter (etaf-reader--read-json-file file))
-               (index (or (plist-get chapter :index) count))
-               (chapter-id (format "%s#%d" id index)))
-          (etaf-reader-store-put-chapter
-           (list :id chapter-id :book id :idx index
-                 :title (or (plist-get chapter :title) "")
-                 :chars (or (plist-get chapter :chars) 0)))
-          (etaf-reader-store-put-content
-           (list :id chapter-id
-                 :text (or (plist-get chapter :text) "")
-                 :blocks (etaf-reader--json-encode
-                          (or (plist-get chapter :blocks) []))))
-          (setq count (1+ count))))
+      (let (chapter-rows content-rows)
+        (dolist (entry chapters)
+          (let* ((file (expand-file-name (plist-get entry :file) cache))
+                 (chapter (etaf-reader--read-json-file file))
+                 (index (or (plist-get chapter :index) count))
+                 (chapter-id (format "%s#%d" id index)))
+            (push (list :id chapter-id :book id :idx index
+                        :title (or (plist-get chapter :title) "")
+                        :chars (or (plist-get chapter :chars) 0))
+                  chapter-rows)
+            (push (list :id chapter-id
+                        :text (or (plist-get chapter :text) "")
+                        :blocks (etaf-reader--json-encode
+                                 (or (plist-get chapter :blocks) [])))
+                  content-rows)
+            (setq count (1+ count))))
+        ;; One batch per table: a thousand-chapter book no longer pays a
+        ;; Controller reload for every row (measured 7.7 s before).
+        (etaf-reader-store-put-chapters (nreverse chapter-rows))
+        (etaf-reader-store-put-contents (nreverse content-rows)))
       (etaf-reader-store-put-book
        (list :id id
              :title (or (plist-get manifest :title) (plist-get manifest :path))

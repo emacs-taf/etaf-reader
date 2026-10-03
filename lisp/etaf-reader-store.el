@@ -222,17 +222,23 @@ FILE defaults to `etaf-reader-store-file'."
   "Return how many chapters BOOK has in the store."
   (length (etaf-reader-store-chapters book)))
 
-(defun etaf-reader-store-put-chapter (row)
-  "Insert or update chapter ROW."
-  (etaf-reader--put 'chapters 'upsert row))
+(defun etaf-reader-store-put-chapters (rows)
+  "Insert or update chapter metadata ROWS in one batch.
+One source batch and one Controller reconciliation replace a write per
+chapter, so importing a long book stays linear."
+  (etaf-data-mutate-many
+   (etaf-reader--controller 'chapters)
+   (mapcar (lambda (row) (list 'upsert row)) rows)))
 
 (defun etaf-reader-store-content (chapter-id)
   "Return the content row of CHAPTER-ID, or nil."
   (car (etaf-reader--rows 'contents (list :id chapter-id))))
 
-(defun etaf-reader-store-put-content (row)
-  "Insert or update content ROW."
-  (etaf-reader--put 'contents 'upsert row))
+(defun etaf-reader-store-put-contents (rows)
+  "Insert or update chapter content ROWS in one batch."
+  (etaf-data-mutate-many
+   (etaf-reader--controller 'contents)
+   (mapcar (lambda (row) (list 'upsert row)) rows)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Annotations

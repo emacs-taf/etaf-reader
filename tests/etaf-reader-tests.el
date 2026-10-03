@@ -149,7 +149,15 @@
             (let ((state (etaf-reader-state session)))
               (should (eq (plist-get state :view) 'reader))
               (should (= (plist-get state :chapters) 3))
-              (should (etaf-reader-lines session))))
+              (should (etaf-reader-lines session)))
+            ;; The batch write keeps every chapter paired with its metadata:
+            ;; open the last chapter and read its own text back.
+            (etaf-reader-open-chapter session 2)
+            (should (string-match-p
+                     "故事到这里结束"
+                     (mapconcat (lambda (line)
+                                  (or (plist-get line :text) ""))
+                                (etaf-reader-lines session) ""))))
         (delete-directory folder t)))))
 
 ;;; ---------------------------------------------------------------------------
