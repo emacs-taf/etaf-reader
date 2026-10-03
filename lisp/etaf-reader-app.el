@@ -42,7 +42,10 @@
 
 (defun etaf-reader--call (function)
   "Run FUNCTION for the current session with error reporting."
-  (etaf-reader-guard (etaf-reader--current) function))
+  (let* ((session (etaf-reader--current))
+         (etaf-reader-store-file (plist-get session :store-file))
+         (etaf-reader-cache-directory (plist-get session :cache-directory)))
+    (etaf-reader-guard session function)))
 
 (defun etaf-reader--cursor-move (session delta-line delta-char)
   "Move the selection caret by DELTA-LINE lines and DELTA-CHAR characters."
@@ -82,7 +85,13 @@
                         (etaf-reader-theme-defaults (etaf-value theme)))
                       :name 'etaf-reader-theme-tokens)))
   :setup
-  (etaf-theme-provide tokens)
+  (progn
+    (etaf-theme-provide tokens)
+    (etaf-on-unmounted
+     (lambda ()
+       (when-let* ((timer (plist-get reader :save-timer)))
+         (cancel-timer timer)
+         (plist-put reader :save-timer nil)))))
   :render
   (etaf-reader-view reader))
 
@@ -100,15 +109,21 @@
     (let ((buffer (window-buffer window)))
       (when (buffer-live-p buffer)
         (when-let* ((session (buffer-local-value 'etaf-reader--session buffer)))
-          (ignore-errors
-            (etaf-reader-sync-metrics session
-                                      (window-body-width window)
-                                      (window-body-height window))))))))
+          (etaf-reader-guard
+           session (lambda ()
+                     (etaf-reader-sync-metrics session
+                                               (window-body-width window)
+                                               (window-body-height window))
+                     (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
+                       (let ((width (window-body-width window t))
+                             (height (window-body-height window)))
+                         (unless (equal (etaf-runtime-viewport runtime) (cons width height))
+                           (etaf-runtime-refit runtime width height)))))))))))
 
 (defun etaf-reader--install-size-hook ()
   "Install the reader's global window-size hook once."
   (unless etaf-reader--size-hook-installed
-    (add-hook 'window-size-change-functions #'etaf-reader--window-size-changed)
+    (add-hook 'window-size-change-functions #'etaf-reader--window-size-changed t)
     (setq etaf-reader--size-hook-installed t)))
 
 ;;; ---------------------------------------------------------------------------
@@ -141,6 +156,10 @@
     (define-key map (kbd "c") #'etaf-reader-toc-command)
     (define-key map (kbd "a") #'etaf-reader-notes-command)
     (define-key map (kbd "b") #'etaf-reader-bookmark-command)
+    (define-key map (kbd "B") #'etaf-reader-bookmarks-command)
+    (define-key map (kbd "S") #'etaf-reader-search-results-command)
+    (define-key map (kbd "o") #'etaf-reader-settings-command)
+    (define-key map (kbd "u") #'etaf-reader-jump-back-command)
     (define-key map (kbd "g") #'etaf-reader-goto-percent-command)
     (define-key map (kbd "z") #'etaf-reader-toggle-mode-command)
     (define-key map (kbd "[") #'etaf-reader-narrower-command)
@@ -165,6 +184,10 @@
 (defvar etaf-reader--command-maps
   (list (cons 'etaf-reader--session
               (let ((map (make-sparse-keymap)))
+                ;; Focused controls carry a native keymap above the major-mode
+                ;; map.  Keep every reader command available there too, while
+                ;; leaving TAB and unbound pointer events to the renderer.
+                (set-keymap-parent map etaf-reader-mode-map)
                 ;; The renderer's minor-mode map owns these keys and wins over
                 ;; a major-mode map; an `emulation-mode-map-alists' entry wins
                 ;; over every minor mode, so the reader replaces them here.
@@ -194,7 +217,8 @@ between them).")
    (lambda ()
      (let ((session (etaf-reader--current)))
        (if (and (etaf-reader-selection session)
-                (null (etaf-focused-host-ref)))
+                (etaf-reader--read session :cursor)
+                (null (etaf-reader--read session :toolbar)))
            (etaf-reader-show-toolbar session)
          (etaf-activate))))))
 
@@ -208,10 +232,13 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let ((session (etaf-reader--current)))
-       (if (eq (etaf-reader--read session :mode) 'scroll)
-           (etaf-reader-scroll-lines session 3)
-         (etaf-reader-clear-selection session)
-         (etaf-reader-next-page session))))))
+       (cond ((etaf-reader--read session :pane) (etaf-reader--step-pane session 1))
+             ((eq (etaf-reader--read session :view) 'shelf)
+              (etaf-reader-page-library session 1))
+             ((eq (etaf-reader--read session :mode) 'scroll)
+              (etaf-reader-scroll-lines session 3))
+             (t (etaf-reader-clear-selection session)
+                (etaf-reader-next-page session)))))))
 
 (defun etaf-reader-previous-page-command ()
   "Turn to the previous page (page mode) or scroll back (scroll mode)."
@@ -219,10 +246,13 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let ((session (etaf-reader--current)))
-       (if (eq (etaf-reader--read session :mode) 'scroll)
-           (etaf-reader-scroll-lines session -3)
-         (etaf-reader-clear-selection session)
-         (etaf-reader-previous-page session))))))
+       (cond ((etaf-reader--read session :pane) (etaf-reader--step-pane session -1))
+             ((eq (etaf-reader--read session :view) 'shelf)
+              (etaf-reader-page-library session -1))
+             ((eq (etaf-reader--read session :mode) 'scroll)
+              (etaf-reader-scroll-lines session -3))
+             (t (etaf-reader-clear-selection session)
+                (etaf-reader-previous-page session)))))))
 
 (defun etaf-reader-forward-line-command ()
   "Move down one line, or extend the keyboard selection."
@@ -303,7 +333,10 @@ between them).")
   (interactive)
   (etaf-reader--call
    (lambda ()
-     (etaf-reader-clear-selection (etaf-reader--current)))))
+     (let ((session (etaf-reader--current)))
+       (etaf-batch
+         (etaf-reader--write session :pane nil)
+         (etaf-reader-clear-selection session))))))
 
 (defun etaf-reader-search-command ()
   "Search the current book."
@@ -311,9 +344,14 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let* ((session (etaf-reader--current))
-            (query (read-string "搜索全书：")))
-       (unless (string-empty-p (string-trim query))
-         (etaf-reader-search-book session (string-trim query)))))))
+            (shelf (eq (etaf-reader--read session :view) 'shelf))
+            (query (string-trim (read-string (if shelf "书名或作者：" "搜索全书：")))))
+       (if shelf
+           (etaf-reader-filter-library session query)
+         (unless (string-empty-p query)
+           (etaf-reader--remember-position session)
+           (etaf-reader-search-book session query)
+           (etaf-reader-show-pane session 'search)))))))
 
 (defun etaf-reader-search-next-command ()
   "Jump to the next search match."
@@ -332,8 +370,7 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let ((session (etaf-reader--current)))
-       (etaf-reader--write session :pane
-                           (if (eq (etaf-reader--read session :pane) 'toc) nil 'toc))))))
+       (etaf-reader-show-pane session 'toc)))))
 
 (defun etaf-reader-notes-command ()
   "Toggle the notes pane."
@@ -341,11 +378,27 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let ((session (etaf-reader--current)))
-       (etaf-reader--write session :book-notes
-                           (etaf-reader-store-annotations
-                            (plist-get (etaf-reader--read session :book) :id)))
-       (etaf-reader--write session :pane
-                           (if (eq (etaf-reader--read session :pane) 'notes) nil 'notes))))))
+       (etaf-reader-show-pane session 'notes)))))
+
+(defun etaf-reader-bookmarks-command ()
+  "Open the bookmark list."
+  (interactive)
+  (etaf-reader--call (lambda () (etaf-reader-show-pane (etaf-reader--current) 'bookmarks))))
+
+(defun etaf-reader-search-results-command ()
+  "Open the current search result list."
+  (interactive)
+  (etaf-reader--call (lambda () (etaf-reader-show-pane (etaf-reader--current) 'search))))
+
+(defun etaf-reader-settings-command ()
+  "Open reading preferences."
+  (interactive)
+  (etaf-reader--call (lambda () (etaf-reader-show-pane (etaf-reader--current) 'settings))))
+
+(defun etaf-reader-jump-back-command ()
+  "Return to the position before a navigation jump."
+  (interactive)
+  (etaf-reader--call (lambda () (etaf-reader-jump-back (etaf-reader--current)))))
 
 (defun etaf-reader-bookmark-command ()
   "Bookmark the top line of the current page."
@@ -369,18 +422,14 @@ between them).")
    (lambda ()
      (let* ((session (etaf-reader--current))
             (mode (if (eq (etaf-reader--read session :mode) 'page) 'scroll 'page)))
-       (etaf-reader--write session :mode mode)
-       (etaf-reader-sync-metrics session)
+       (etaf-reader-configure session :mode mode)
        (etaf-reader-message session (if (eq mode 'page) "翻页模式" "滚动模式"))))))
 
 (defun etaf-reader--adjust-columns (session delta)
   "Adjust SESSION's reading width by DELTA characters."
   (let* ((row (or (etaf-reader--read session :metrics) '()))
          (columns (max 24 (min 72 (+ (or (plist-get row :columns) 40) delta)))))
-    (plist-put row :columns columns)
-    (plist-put row :manual t)
-    (etaf-reader--write session :metrics row)
-    (etaf-reader-reflow session)
+    (etaf-reader-configure session :columns columns)
     (etaf-reader-message session (format "栏宽 %d 字符" columns))))
 
 (defun etaf-reader-wider-command ()
@@ -404,7 +453,7 @@ between them).")
             (themes '(dark light sepia))
             (current (etaf-reader--read session :theme))
             (tail (cdr (memq current themes))))
-       (etaf-reader--write session :theme (or (car tail) (car themes)))
+       (etaf-reader-configure session :theme (or (car tail) (car themes)))
        (etaf-reader-message session
                             (format "主题：%s" (etaf-reader--read session :theme)))))))
 
@@ -431,7 +480,8 @@ between them).")
             (default (expand-file-name
                       (concat (or (plist-get book :title) "notes") ".md")
                       "~/"))
-            (file (read-file-name "导出到：" default)))
+            (file (read-file-name "导出到：" (file-name-directory default)
+                                  default nil (file-name-nondirectory default))))
        (etaf-reader-export-notes session file)))))
 
 (defun etaf-reader-help-command ()
@@ -440,19 +490,13 @@ between them).")
   (etaf-reader--call
    (lambda ()
      (let ((session (etaf-reader--current)))
-       (etaf-reader--write session :pane
-                           (if (eq (etaf-reader--read session :pane) 'help) nil 'help))))))
+       (etaf-reader-show-pane session 'help)))))
 
 (defun etaf-reader--wheel (delta)
   "Scroll by DELTA lines (or turn pages)."
-  (etaf-reader--call
-   (lambda ()
-     (let ((session (etaf-reader--current)))
-       (if (eq (etaf-reader--read session :mode) 'page)
-           (if (> delta 0)
-               (etaf-reader-next-page session)
-             (etaf-reader-previous-page session))
-         (etaf-reader-scroll-lines session delta))))))
+  (if (> delta 0)
+      (etaf-reader-next-page-command)
+    (etaf-reader-previous-page-command)))
 
 (defun etaf-reader-wheel-down-command ()
   "Scroll the reader downwards."
@@ -472,10 +516,18 @@ between them).")
   "Mount SESSION in its buffer and return that buffer."
   (let* ((buffer (get-buffer-create "*ETAF Reader*"))
          (window (get-buffer-window buffer t)))
+    ;; A new session must not retain the old Component's bindings or timer.
+    (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
+      (with-current-buffer buffer
+        (when etaf-reader--session
+          (let ((etaf-reader-store-file (plist-get etaf-reader--session :store-file)))
+            (etaf-reader-save-quiet etaf-reader--session))))
+      (etaf-unmount runtime))
     (plist-put session :buffer buffer)
     (with-current-buffer buffer
       (setq-local etaf-reader--session session)
       (setq-local truncate-lines t)
+      (setq-local auto-hscroll-mode nil)
       (setq-local mode-line-format nil)
       (setq-local emulation-mode-map-alists
                   (cons 'etaf-reader--command-maps
@@ -495,6 +547,7 @@ between them).")
     (let ((display-buffer-overriding-action '((display-buffer-same-window))))
       (pop-to-buffer buffer))
     (setq window (get-buffer-window buffer t))
+    (when (window-live-p window) (set-window-hscroll window 0))
     ;; Store reads happen before mounting: creating Data Controllers inside
     ;; ETAF's publication is a render side effect and is rejected.
     (etaf-reader--write session :books (etaf-reader-store-books))
@@ -532,6 +585,8 @@ and tests display the exact state they built."
   (interactive)
   (let* ((provided (and (listp file) (plist-get file :view)))
          (session (if provided file (etaf-reader-create)))
+         (etaf-reader-store-file (plist-get session :store-file))
+         (etaf-reader-cache-directory (plist-get session :cache-directory))
          (buffer (etaf-reader--display session)))
     (cond
      (provided nil)
@@ -564,7 +619,8 @@ and tests display the exact state they built."
   "Save the reading position and close the reader."
   (interactive)
   (let* ((session (etaf-reader--current))
-         (buffer (current-buffer)))
+         (buffer (current-buffer))
+         (etaf-reader-store-file (plist-get session :store-file)))
     (etaf-reader-save-quiet session)
     (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
       (etaf-unmount runtime))

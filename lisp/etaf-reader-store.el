@@ -19,6 +19,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'json)
 (require 'etaf)
 (require 'etaf-db)
 (require 'etaf-reader-theme)
@@ -116,13 +117,32 @@
          (etaf-sqlite-column :created "created" :type 'integer :nullable t))
    :id))
 
+(defun etaf-reader--preferences-table ()
+  "Return persisted application reading preferences."
+  (etaf-sqlite-table
+   'preferences
+   (list (etaf-sqlite-column :id "id" :type 'text :primary t)
+         (etaf-sqlite-column :value "value" :type 'text))
+   :id))
+
+(defun etaf-reader-store-preferences ()
+  "Return the saved preference object, or nil."
+  (when-let* ((row (car (etaf-reader--rows 'preferences (list :id "reading")))))
+    (json-parse-string (plist-get row :value) :object-type 'plist)))
+
+(defun etaf-reader-store-put-preferences (preferences)
+  "Persist the validated PREFERENCES object."
+  (etaf-reader--put 'preferences 'upsert
+                    (list :id "reading" :value (json-encode preferences))))
+
 (defconst etaf-reader--table-builders
   '((books . etaf-reader--books-table)
     (chapters . etaf-reader--chapters-table)
     (contents . etaf-reader--contents-table)
     (annotations . etaf-reader--annotations-table)
     (states . etaf-reader--states-table)
-    (bookmarks . etaf-reader--bookmarks-table))
+    (bookmarks . etaf-reader--bookmarks-table)
+    (preferences . etaf-reader--preferences-table))
   "Table keyword -> descriptor builder.")
 
 ;;; ---------------------------------------------------------------------------

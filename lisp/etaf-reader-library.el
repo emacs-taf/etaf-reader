@@ -111,6 +111,13 @@ cannot block on a runaway child."
 ;;; Library operations
 ;;; ---------------------------------------------------------------------------
 
+(defun etaf-reader--book-title (book)
+  "Return BOOK's metadata title or its file name when metadata is blank."
+  (let ((title (string-trim (or (plist-get book :title) ""))))
+    (if (string-empty-p title)
+        (if-let* ((path (plist-get book :path))) (file-name-base path) "未命名书籍")
+      title)))
+
 (defun etaf-reader--book-id (path)
   "Return the stable identity of the book at PATH."
   (secure-hash 'sha1 (file-truename (expand-file-name path))))

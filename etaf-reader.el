@@ -50,21 +50,23 @@
 ;; Function: etaf-reader-close ()
 ;;;###autoload (autoload 'etaf-reader-close "etaf-reader" nil t)
 ;; Save the reading position and close the current reader.
-;; Unmounting releases the session's pending save timer and its Data
-;; Controllers; the buffer is killed.
+;; Unmounting releases the session's pending save timer and kills the buffer.
+;; The library connection is cached for reuse by later sessions.
 ;;
 ;; Function: etaf-reader-create (&key parser theme)
 ;; Create a headless reader session and return it.
 ;; PARSER defaults to the `ebook-parse' backend; a caller may pass the plist
 ;; described by `etaf-reader-library' to drive the same reader from another
-;; parser.  THEME selects the initial palette.  The session owns no buffer and
+;; parser. Saved reading preferences are restored from the configured database;
+;; an explicit THEME overrides the saved palette. The session owns no buffer and
 ;; no timer before it is mounted, so it is a complete headless reader for
 ;; scripts and tests.
 ;;
 ;; Function: etaf-reader-state (session)
 ;; Return SESSION's state as a detached plist snapshot.
 ;; Keys are `:view', `:book' (title), `:chapter' (index), `:lines', `:line',
-;; `:mode', `:percent', `:annotations', `:selection' and `:message'.  The
+;; `:mode', `:theme', `:density', `:pane', `:percent', `:annotations',
+;; `:selection' and `:message'. The
 ;; snapshot copies every value, so mutating it never changes the reader.
 ;;
 ;; Function: etaf-reader-open-book (session book &optional parser)
@@ -121,6 +123,33 @@
 ;; Each row is a book plist (`:id', `:title', `:author', `:format', `:path',
 ;; `:chapters', `:chars', `:pages').  Refresh the shelf first (or open the
 ;; reader, which loads it) before reading this list.
+;;
+;; Function: etaf-reader-configure (session &rest options)
+;; Validate, apply and persist reading options: :theme dark/light/sepia,
+;; :mode page/scroll, :density compact/comfortable, :columns auto or 24..72.
+;; Return the saved preference plist. Invalid options signal etaf-reader-error
+;; before any change. Settings are restored when opening a new reader.
+;;
+;; Function: etaf-reader-filter-library (session query &optional filter sort)
+;; Search cached titles/authors and reset the library page. FILTER is all,
+;; reading, unread or finished; SORT is recent, title or author. Return books.
+;;
+;; Function: etaf-reader-library-page (session)
+;; Return a bounded library page: :items, zero-based :index, :pages, :total.
+;;
+;; Function: etaf-reader-page-library (session delta)
+;; Move the library by DELTA pages, clamp at the ends and return its page.
+;;
+;; Function: etaf-reader-show-pane (session pane)
+;; Toggle toc, notes, bookmarks, search, settings or help; nil closes it.
+;; Reading navigation requires an open book. Storage is read before rendering.
+;;
+;; Function: etaf-reader-jump (session chapter offset)
+;; Navigate to CHAPTER/OFFSET, retaining the previous position for jump-back.
+;; History is session-owned, bounded to 100 entries and cleared on book change.
+;;
+;; Function: etaf-reader-jump-back (session)
+;; Return to the previous navigation position; empty history shows a message.
 ;;
 ;; Function: etaf-reader-lines (session)
 ;; Return the wrapped lines of SESSION's current chapter.
@@ -224,6 +253,7 @@
 (require 'etaf-reader-store)
 (require 'etaf-reader-library)
 (require 'etaf-reader-model)
+(require 'etaf-reader-navigation)
 (require 'etaf-reader-views)
 (require 'etaf-reader-app)
 

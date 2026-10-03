@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Switching books saves the previous position before replacing book identity;
+  replacing a mounted session releases its old progress timer and bindings.
+- Application shortcuts remain active while a toolbar control is focused.
+  Library search no longer leaves the canvas horizontally scrolled, and blank
+  metadata titles fall back to the file name.
 - The reader no longer touches the store while ETAF renders: the shelf View
   reads cached rows, and store work happens before mounting.
 - `SPC`, `DEL`, the page keys, `n`, `q`, `RET` and the wheel are no longer
@@ -34,6 +39,14 @@
 
 ### Added
 
+- A reading toolbar, paper-like columns and comfortable paragraph spacing.
+  Reading settings persist palette, mode, column width and paragraph density.
+- Searchable, sorted and paged library views with cached cover thumbnails and
+  reading-state filters. Long contents, notes, search and bookmark lists have
+  page controls; bookmarks can be removed and navigation jumps can be undone.
+- A maintained native GUI workflow covering a real local book, library search,
+  settings, bookmarks, selection, highlighting and the Markdown export prompt,
+  plus a four-size layout scenario.
 - Local ebook reader application: shelf, library scan and import through the
   `ebook-parse` skill, SQLite storage through ETAF DB, paged and scrolling
   reading layout, dark/light/sepia palettes, adjustable reading width.

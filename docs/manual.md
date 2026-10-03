@@ -7,6 +7,13 @@ configured directories are scanned once; later use `i` to rescan. Files are
 identified by the true path of the file, so moving a file imports it as a new
 book while an unchanged file keeps its annotations and progress.
 
+The shelf shows bounded pages rather than clipping the library after one
+screen. Search by title or author with `s` or the Search button; clear the query
+to show the whole library. Filter All/Reading/Unread/Finished and sort by recent
+reading, title or author. Page buttons and SPC/DEL reach the remaining books.
+Imported books show their cached covers; books without a cover use an initials
+avatar. Opening a book resumes its stored location.
+
 | Variable | Meaning |
 | --- | --- |
 | `etaf-reader-library-directories` | directories scanned by the shelf (default `~/ebooks`) |
@@ -27,6 +34,17 @@ or two columns, scroll mode shows one column and moves three lines per wheel
 step. `[` and `]` adjust the column width, `z` switches mode, `t` cycles the
 dark/light/sepia palettes, and a window resize re-wraps and re-paginates
 through `window-size-change-functions`.
+
+The top toolbar provides Library, Contents, Notes, Search and More. `o` opens
+Reading Settings: palette, paged/scrolling mode, comfortable/compact paragraph
+spacing and automatic or fixed column width. These choices are stored in the
+library database and restored in the next session. An explicit `:theme` when
+creating a scripted session overrides the saved initial palette.
+
+Normal pages publish one styled text Host per column, including headings and
+annotations. The selected line gains a nearby toolbar without imposing a
+limit on the number of annotated segments. Font-size controls and inline ebook
+illustrations are not yet provided.
 
 Progress is stored as chapter index, character offset and percent; reading
 time accumulates while the reader is open and is written together with the
@@ -55,26 +73,53 @@ text through re-wrapping and font changes. `a` lists the whole book's notes;
 
 `s` searches the whole book (case-insensitive, wrapping around the current
 chapter), `n`/`N` walk the matches, and the match is selected so the toolbar
-can mark it. `c` opens the table of contents and `b` bookmarks the current
-page; bookmarks are stored in the `bookmarks` table.
+can mark it. `S` reopens the results with snippets. `c` opens the table of
+contents at the current chapter; `b` bookmarks the current page and `B` opens
+the bookmark list. Contents, notes, search results and bookmarks have page
+controls. Choose an item to jump to its location; `u` returns to the position
+before a navigation jump. The bookmark dialog also offers deletion, and the
+notes dialog opens annotation editing or exports Markdown. `C-g` closes a pane
+or cancels a selection without closing the book.
 
 ## Scripting
 
-A session is a plain plist of reactive refs and needs no buffer:
+A session needs no buffer or timer until mounted. Its reading preferences are
+restored from the configured database. Use its supported accessors rather than
+inspecting the internal session representation:
 
 ```elisp
 (let ((reader (etaf-reader-create)))
   (etaf-reader-refresh-library reader)          ; scan or rescan
-  (etaf-reader-open-book reader (car (etaf-reader-store-books)))
+  (etaf-reader-open-book reader (car (etaf-reader-books reader)))
   (etaf-reader-goto-percent reader 40)
   (etaf-reader-set-metrics reader 40 20 1 'medium 'page)
-  (etaf-reader-reflow reader)
+  (etaf-reader-configure reader :theme 'sepia :density 'comfortable)
   (etaf-reader-state reader))
 ```
 
 Pass `:parser` to `etaf-reader-create` to drive the same reader from another
 backend; it is a plist with `:scan` (directory -> `(:books ... :failed N)`)
 and `:extract` (path, output directory -> `(:out ...)`) functions.
+
+## GUI verification
+
+The maintained `scripts/etaf-reader-gui-scenarios.el` uses ETAF's
+`emacs-gui-verifier` engine. In a dedicated graphical Emacs with the application
+and ETAF `scripts/` directories on `load-path`, bind `etaf-reader-store-file`
+to a disposable copy of the real library database, then schedule:
+
+```elisp
+(require 'etaf-reader-gui-scenarios)
+(run-at-time 0.1 nil #'etaf-reader-gui-run
+             "/tmp/reader-gui-evidence" "/path/to/book.epub"
+             "The displayed book title" "A matching library query" t)
+```
+
+The directory must be new. The scenario uses native keys, focused RET
+activation and native minibuffer input; it changes preferences and creates a
+bookmark and annotation in the disposable database. Inspect `result.json`
+and the captured images separately. It does not certify physical mouse input
+or foreground latency. Close the dedicated instance after verification.
 
 ## Troubleshooting
 

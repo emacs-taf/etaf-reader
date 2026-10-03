@@ -20,18 +20,21 @@ Selected text opens the annotation toolbar above or below the line:
 
 - Library: scans `etaf-reader-library-directories` (default `~/ebooks`),
   stores metadata and chapter text in SQLite, and shows a shelf with progress,
-  reading state and per-book format, pages and chapter counts.
+  reading state and per-book format, pages and chapter counts. Search titles
+  and authors, filter reading states, sort the shelf and page through every
+  result; imported covers are shown when available.
 - Formats: EPUB 2/3, TXT, Markdown, HTML, FB2 and PDF, parsed by the
   `ebook-parse` skill; PDF needs poppler's `pdftotext`/`pdfinfo`.
 - Reading: paged mode (one column on narrow frames, two columns on wide ones)
   or scrolling mode, adjustable column width, six annotation colors, and three
-  palettes (dark, light, sepia).
+  palettes (dark, light, sepia). A reading toolbar and persisted settings expose
+  these choices along with comfortable or compact paragraph spacing.
 - Annotations: mouse drag or the `v` keyboard selection mode opens a floating
   toolbar above or below the line; highlights, straight and wavy underlines and
   thoughts anchor on (chapter, code point) pairs, so they survive re-wrapping,
   font changes and window resizes.
-- Navigation: table of contents, notes pane, in-book search with `n`/`N`,
-  bookmarks and percentage jumps.
+- Navigation: paged contents, notes, search-result and bookmark lists, in-book
+  search with `n`/`N`, percentage jumps and return-to-previous-location.
 - Progress: chapter and offset are saved per book with reading time; the shelf
   shows percent and last-read time, and a book reopens where it was left.
 - Export: annotations of the current book are written as Markdown.
@@ -71,13 +74,11 @@ checkout under `~/.pi/agent/skills/ebook-parse`.
 ## Minimal example
 
 ```elisp
-(let* ((session (etaf-reader-create))
-       (parser (list :scan (lambda (dir) (list :books nil :failed 0))
-                     :extract (lambda (path out) (list :out out)))))
-  (plist-put session :parser parser)
-  (etaf-reader-refresh-library session)   ; fills the shelf from the store
-  (etaf-reader-open-book session (car (etaf-reader-store-books)))
-  (etaf-reader-state session))            ; => (:view reader :chapter 0 ...)
+(let ((session (etaf-reader-create)))
+  (etaf-reader-refresh-library session)
+  (when-let* ((book (car (etaf-reader-books session))))
+    (etaf-reader-open-book session book))
+  (etaf-reader-open session))
 ```
 
 ## Keys
@@ -90,8 +91,9 @@ checkout under `~/.pi/agent/skills/ebook-parse`.
 | `h` / `l` | previous / next chapter (moves the selection while `v` is active) |
 | `v`, then `hjkl`, `RET` | keyboard selection and its toolbar |
 | `s` / `n` / `N` | in-book search, next match, previous match |
-| `c` / `a` | table of contents / notes pane |
-| `b`, `g` | bookmark the page, jump to a percentage |
+| `c` / `a` / `B` / `S` | contents / notes / bookmarks / search results |
+| `b`, `g`, `u` | bookmark the page, jump to a percentage, return before a jump |
+| `o`, `C-g` | reading settings, close the current pane/selection |
 | `z`, `[`, `]`, `t` | mode, width, width, palette |
 | `f`, `i`, `E`, `?`, `q` | shelf, rescan, export notes, help, close |
 

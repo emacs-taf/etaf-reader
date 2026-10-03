@@ -12,6 +12,26 @@
   "support": [],
   "cases": [
     {
+      "name": "etaf-reader-tests-switching-books-keeps-separate-progress",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Switching between books preserves independent chapter positions and never attributes the previous book's progress to the next."
+    },
+    {
+      "name": "etaf-reader-tests-library-query-sort-and-pages",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Query and author filters reset pagination and every matching book remains reachable in the requested order."
+    },
+    {
+      "name": "etaf-reader-tests-preferences-persist-and-reject-invalid-options",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Preferences persist across sessions and invalid mixed options leave state unchanged."
+    },
+    {
+      "name": "etaf-reader-tests-navigation-panes-and-return-position",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "Mounted navigation dialogs and settings open and close through public actions and keys while preserving the reading page and jump history."
+    },
+    {
       "name": "etaf-reader-tests-mounted-styled-pages-and-final-page",
       "file": "tests/etaf-reader-tests.el",
       "purpose": "Mounted one- and two-column turns preserve heading and annotation faces, render the final partial page, and continue through the keyboard after resizing."

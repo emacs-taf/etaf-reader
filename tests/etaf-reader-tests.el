@@ -375,5 +375,119 @@
           (with-current-buffer buffer (etaf-reader-close)))
         (delete-directory folder t)))))
 
+(ert-deftest etaf-reader-tests-library-query-sort-and-pages ()
+  "Every filtered book remains reachable through bounded library pages."
+  (etaf-reader-tests--with-environment
+    (let* ((directory (make-temp-file "reader-library-" t))
+           (etaf-reader-library-directories (list directory))
+           (parser
+            (list :scan
+                  (lambda (_directory)
+                    (list :failed 0 :books
+                          (cl-loop for n below 12
+                                   collect (list :path (expand-file-name (format "Book %02d.epub" n) directory)
+                                                 :title (if (= n 0) "" (format "Book %02d" n))
+                                                 :author (if (< n 6) "甲" "乙")
+                                                 :format "epub" :size 1 :mtime 1))))))
+           (session (etaf-reader-create :parser parser)))
+      (unwind-protect
+          (progn
+            (etaf-reader-refresh-library session)
+            (etaf-reader-set-metrics session 40 14 1 'medium 'page)
+            (should (= 6 (length (etaf-reader-filter-library session "甲" 'all 'title))))
+            (let (titles)
+              (dotimes (_ 3)
+                (setq titles (append titles (mapcar (lambda (book) (plist-get book :title))
+                                                    (plist-get (etaf-reader-library-page session) :items))))
+                (etaf-reader-page-library session 1))
+              (should (equal titles '("Book 00" "Book 01" "Book 02" "Book 03" "Book 04" "Book 05"))))
+            (etaf-reader-filter-library session "Book 11" 'unread)
+            (should (= 0 (plist-get (etaf-reader-library-page session) :index)))
+            (should (= 1 (plist-get (etaf-reader-library-page session) :total))))
+        (delete-directory directory t)))))
+
+(ert-deftest etaf-reader-tests-preferences-persist-and-reject-invalid-options ()
+  "Reading preferences survive a new session; invalid input changes nothing."
+  (etaf-reader-tests--with-environment
+    (let ((session (etaf-reader-create)))
+      (etaf-reader-configure session :theme 'sepia :mode 'scroll :density 'compact :columns 32)
+      (let ((before (etaf-reader-state session)))
+        (should-error (etaf-reader-configure session :theme 'light :columns 0)
+                      :type 'etaf-reader-error)
+        (should (equal before (etaf-reader-state session))))
+      (let ((state (etaf-reader-state (etaf-reader-create))))
+        (should (eq (plist-get state :theme) 'sepia))
+        (should (eq (plist-get state :mode) 'scroll))
+        (should (eq (plist-get state :density) 'compact))))))
+
+(ert-deftest etaf-reader-tests-navigation-panes-and-return-position ()
+  "Mounted navigation opens, pages and closes without losing the reading page."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-navigation-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create :parser (etaf-reader-tests--parser folder))))
+           buffer)
+      (unwind-protect
+          (save-window-excursion
+            (setq buffer (etaf-reader-open session))
+            (etaf-reader-jump session 2 0)
+            (should (= 2 (plist-get (etaf-reader-state session) :chapter)))
+            (etaf-reader-jump-back session)
+            (should (= 0 (plist-get (etaf-reader-state session) :chapter)))
+            (dolist (pane '(toc notes bookmarks search settings help))
+              (etaf-reader-show-pane session pane)
+              (should (eq pane (plist-get (etaf-reader-state session) :pane)))
+              (with-current-buffer buffer
+                (should (string-match-p "关闭" (buffer-substring-no-properties (point-min) (point-max)))))
+              (etaf-reader-show-pane session nil)
+              (with-current-buffer buffer
+                (should (string-match-p "测试书" (buffer-substring-no-properties (point-min) (point-max))))))
+            ;; App keys must still work while a catalog control owns focus.
+            (let* ((runtime (etaf-runtime-for-buffer buffer))
+                   (control (seq-find
+                             (lambda (entry)
+                               (equal (plist-get (cdr entry) :aria-label) "更多"))
+                             (etaf-runtime-host-props-entries runtime))))
+              (should control)
+              (with-current-buffer buffer (etaf-focus runtime (car control))))
+            (with-current-buffer buffer (execute-kbd-macro (kbd "o")))
+            (should (eq 'settings (plist-get (etaf-reader-state session) :pane)))
+            (with-current-buffer buffer (execute-kbd-macro (kbd "C-g")))
+            (should-not (plist-get (etaf-reader-state session) :pane)))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
+        (delete-directory folder t)))))
+
+(ert-deftest etaf-reader-tests-switching-books-keeps-separate-progress ()
+  "Switching books never saves the previous chapter against the new book."
+  (etaf-reader-tests--with-environment
+    (let* ((first-root (make-temp-file "reader-first-" t))
+           (second-root (make-temp-file "reader-second-" t))
+           (first-parser (etaf-reader-tests--parser first-root))
+           (second-parser (etaf-reader-tests--parser second-root))
+           (reader (etaf-reader-create :parser first-parser))
+           (other (etaf-reader-create :parser second-parser)))
+      (unwind-protect
+          (progn
+            (etaf-reader-refresh-library reader)
+            (let ((first-book (car (etaf-reader-books reader))))
+              (etaf-reader-refresh-library other)
+              (let ((second-book
+                     (seq-find (lambda (book)
+                                 (equal (plist-get book :path)
+                                        (expand-file-name "fake-book.epub" second-root)))
+                               (etaf-reader-books other))))
+                (etaf-reader-open-book reader first-book first-parser)
+                (etaf-reader-open-chapter reader 1)
+                (etaf-reader-open-book reader second-book second-parser)
+                (should (= 0 (plist-get (etaf-reader-state reader) :chapter)))
+                (etaf-reader-open-chapter reader 2)
+                (etaf-reader-open-book reader first-book first-parser)
+                (should (= 1 (plist-get (etaf-reader-state reader) :chapter)))
+                (etaf-reader-open-book reader second-book second-parser)
+                (should (= 2 (plist-get (etaf-reader-state reader) :chapter))))))
+        (delete-directory first-root t)
+        (delete-directory second-root t)))))
+
 (provide 'etaf-reader-tests)
 ;;; etaf-reader-tests.el ends here

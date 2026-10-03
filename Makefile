@@ -4,7 +4,8 @@ EMACS ?= emacs
 LOAD_PATH = -L . -L lisp -L tests -L ../../etaf -L ../../etaf-ui -L ../../etaf-db -L ../../ebox -L ../../ecss
 SOURCES = lisp/etaf-reader-theme.el lisp/etaf-reader-store.el
 SOURCES += lisp/etaf-reader-library.el lisp/etaf-reader-model.el
-SOURCES += lisp/etaf-reader-views.el lisp/etaf-reader-app.el etaf-reader.el
+SOURCES += lisp/etaf-reader-navigation.el lisp/etaf-reader-views.el
+SOURCES += lisp/etaf-reader-app.el etaf-reader.el
 SOURCES += $(wildcard examples/*.el)
 
 

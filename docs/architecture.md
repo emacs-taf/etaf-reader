@@ -13,6 +13,7 @@ delegated to ETAF DB; neither is re-implemented here.
 | `etaf-reader-store` | the SQLite schema, Data Controllers and row operations |
 | `etaf-reader-library` | parser discovery/call, scan, import, cover and image cache |
 | `etaf-reader-model` | session refs, wrapping, pagination, selection, annotations, search, progress |
+| `etaf-reader-navigation` | library queries/pages, persisted preferences, navigation panes and bounded jump history |
 | `etaf-reader-views` | pure renderers read from the session refs |
 | `etaf-reader-app` | buffer, keymap, window metrics, commands, mount/unmount |
 
@@ -45,8 +46,10 @@ internal.
   Annotations store `(chapter, start, end)` in the same space, which is why
   they survive re-wrapping, font changes and resizes.
 - **One writer per fact.** Reading position lives in `states`, annotations in
-  `annotations`, book metadata in `books`; views never derive one from another
-  except for display.
+  `annotations`, book metadata in `books`, and reading settings in
+  `preferences`. The constructor restores settings before mounting; Views
+  never query storage. A book switch saves the old book before replacing its
+  identity and chapter together.
 - **Rendering is a function of refs.** Views never call the store; the model
   refreshes cached annotation and state lists when a write happens.
 - **Import is replace-on-success.** An extraction writes to `cache/<id>.new`
@@ -78,6 +81,11 @@ the authoritative position.
 
 The `:line` position is plain session state; `:revision` explicitly requests an
 ordinary repaint. Views no longer write a speculative published-page marker.
+Navigation lists are paged from cached data. The fixed-height canvas owns the
+reading surface and dialog layers, so opening a dialog does not remove the
+reader's viewport constraint. Catalog Buttons, Lists, Selects, Menus, Avatars,
+Progress and Dialogs own their native interaction behavior.
+
 The maintained `reader.page.styled` workload in
 `benchmarks/performance-scenarios.el` drives actual page keys and checks visible
 text. Run it through the workspace performance driver; batch results do not
