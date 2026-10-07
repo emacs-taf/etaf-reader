@@ -2,10 +2,10 @@
 
 ETAF Reader is a local ebook reader for Emacs. It scans a library directory for
 EPUB, TXT, Markdown, HTML, FB2 and PDF files, imports them into one SQLite
-library through [ETAF DB](https://gitea.vhkd.top/geekinney/etaf-db), and reads
+library through [ETAF DB](https://forgejo.vhkd.top/emacs-taf/etaf-db), and reads
 them with an adaptive paged or scrolling layout built from
-[ETAF](https://gitea.vhkd.top/geekinney/etaf) and
-[Ebox](https://gitea.vhkd.top/geekinney/ebox): select text with the mouse or the
+[ETAF](https://forgejo.vhkd.top/emacs-taf/etaf) and
+[Ebox](https://forgejo.vhkd.top/emacs-taf/ebox): select text with the mouse or the
 keyboard, then mark it with a highlighter color, a straight underline or a wavy
 underline, attach thoughts, jump through the table of contents and notes, and
 resume exactly where the last session stopped.
