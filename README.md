@@ -71,6 +71,13 @@ The parser is found automatically: `etaf-reader-parser-command` first, then
 `PI_READER_PARSER`, the installed `ebook-parse` command, then the shared skill
 checkout under `~/.pi/agent/skills/ebook-parse`.
 
+Without a Pi checkout, install the parser as a standalone CLI:
+
+```sh
+git clone https://forgejo.vhkd.top/pi-hub/ebook-parse-cli.git
+cd ebook-parse-cli && ./scripts/install-cli.sh   # links ~/.local/bin/ebook-parse
+```
+
 ## Minimal example
 
 ```elisp
