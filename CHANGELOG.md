@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- The minibuffer and echo area borrow window lines without shrinking the
+  shelf or the reading metrics: the reader keeps the layout it committed
+  until the prompt closes.
 - Switching books saves the previous position before replacing book identity;
   replacing a mounted session releases its old progress timer and bindings.
 - Application shortcuts remain active while a toolbar control is focused.

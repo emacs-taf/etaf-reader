@@ -45,6 +45,10 @@ internal.
   offsets inside a chapter are code point offsets into that projection.
   Annotations store `(chapter, start, end)` in the same space, which is why
   they survive re-wrapping, font changes and resizes.
+- **Borrowed lines are not a resize.** An active minibuffer or a wrapped
+  echo-area message borrows window lines; `etaf-transient-space-borrowed-p'
+  keeps the committed metrics instead of repaginating for the borrowed
+  height.
 - **One writer per fact.** Reading position lives in `states`, annotations in
   `annotations`, book metadata in `books`, and reading settings in
   `preferences`. The constructor restores settings before mounting; Views

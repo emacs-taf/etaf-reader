@@ -125,6 +125,7 @@ PARSER defaults to the `ebook-parse' backend; THEME defaults to
                   :metrics (etaf-ref (list :columns 40 :rows 20 :spread 1
                                            :layout 'medium :mode 'page)
                                      :name 'etaf-reader-metrics)
+                  :window-rows (etaf-ref 0 :name 'etaf-reader-window-rows)
                   :cursor (etaf-ref nil :name 'etaf-reader-cursor)
                   :selection (etaf-ref nil :name 'etaf-reader-selection)
                   :toolbar (etaf-ref nil :name 'etaf-reader-toolbar)
@@ -228,6 +229,7 @@ resize or width change never leaves stale line breaks."
         (setq metrics (plist-put metrics :requested-columns requested))
         (setq metrics (plist-put metrics :manual t))))
     (etaf-batch
+      (etaf-reader--write session :window-rows height)
       (etaf-reader--write session :metrics metrics)
       (unless (equal (plist-get previous :columns) (plist-get metrics :columns))
         (etaf-reader-reflow session)))

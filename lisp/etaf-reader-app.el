@@ -105,16 +105,19 @@
 
 (defun etaf-reader--window-size-changed (frame)
   "Reflow every reader shown on FRAME after a window resize.
-The mount follows the window itself; the reader only repaginates."
+The mount follows the window itself; the reader only repaginates.  Lines
+borrowed by the minibuffer keep the metrics the session already committed."
   (dolist (window (window-list frame))
     (let ((buffer (window-buffer window)))
       (when (buffer-live-p buffer)
         (when-let* ((session (buffer-local-value 'etaf-reader--session buffer)))
-          (etaf-reader-guard
-           session (lambda ()
-                     (etaf-reader-sync-metrics session
-                                               (window-body-width window)
-                                               (window-body-height window)))))))))
+          (unless (etaf-transient-space-borrowed-p
+                   window (etaf-reader--read session :window-rows))
+            (etaf-reader-guard
+             session (lambda ()
+                       (etaf-reader-sync-metrics session
+                                                 (window-body-width window)
+                                                 (window-body-height window))))))))))
 
 (defun etaf-reader--install-size-hook ()
   "Install the reader's global window-size hook once."
