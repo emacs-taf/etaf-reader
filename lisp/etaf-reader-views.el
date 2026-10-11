@@ -27,6 +27,7 @@
 (require 'etaf-reader-navigation)
 
 (declare-function etaf-reader-search-command "etaf-reader-app")
+(declare-function etaf-reader--direction "etaf-reader-app" (direction))
 
 (defun etaf-reader--color-key (color)
   "Return COLOR (a string like \"red\") as a palette keyword."
@@ -397,6 +398,7 @@ Host per slot also keeps blank and final-page slots addressable."
        (flex :ref 'reader-body :id "reader-body"
              :width 'stretch :flex-grow 1 :flex-basis '(lh 0)
              :min-height '(lh 0) :align-items 'stretch
+             :on-direction #'etaf-reader--direction
              :pointer 'text :on-drag (plist-get session :drag-handler)
              :gap (list '(lh 0) (list 'ch 2))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0))
@@ -601,8 +603,8 @@ Host per slot also keeps blank and final-page slots addressable."
                        :close-label "关闭" :backdrop nil :on-close close
             (column :width 'stretch :item-gap '(lh 0)
               (text "空格 / 退格     下一页 / 上一页")
-              (text "j k / H L       逐行 / 换章")
-              (text "v + hjkl + 回车 选择并标注（C-c C-k 取消）")
+              (text "方向键 / H L    逐行 / 换章")
+              (text "v + 方向键 + 回车 选择并标注（C-c C-k 取消）")
               (text "s / n N / S     搜索 / 跳转 / 结果列表")
               (text "c / a / B       目录 / 笔记 / 书签")
               (text "b / u           加书签 / 返回跳转前")

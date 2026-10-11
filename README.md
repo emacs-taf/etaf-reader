@@ -94,9 +94,9 @@ cd ebook-parse-cli && ./scripts/install-cli.sh   # links ~/.local/bin/ebook-pars
 | --- | --- |
 | `SPC` / `PgDn` | next page (or three lines while scrolling) |
 | `DEL` / `PgUp` | previous page |
-| `j` / `k` | one line down / up |
-| `h` / `l` | previous / next chapter (moves the selection while `v` is active) |
-| `v`, then `hjkl`, `RET` | keyboard selection and its toolbar |
+| `↓` / `↑` | one line down / up |
+| `←` / `→` | previous / next page, or cursor movement while `v` is active |
+| `v`, then arrow keys, `RET` | keyboard selection and its toolbar |
 | `s` / `n` / `N` | in-book search, next match, previous match |
 | `c` / `a` / `B` / `S` | contents / notes / bookmarks / search results |
 | `b`, `g`, `u` | bookmark the page, jump to a percentage, return before a jump |

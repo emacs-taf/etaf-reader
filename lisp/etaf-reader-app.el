@@ -135,17 +135,9 @@ borrowed by the minibuffer keep the metrics the session already committed."
     (define-key map (kbd "<next>") #'etaf-reader-next-page-command)
     (define-key map (kbd "DEL") #'etaf-reader-previous-page-command)
     (define-key map (kbd "<prior>") #'etaf-reader-previous-page-command)
-    (define-key map (kbd "j") #'etaf-reader-forward-line-command)
-    (define-key map (kbd "k") #'etaf-reader-backward-line-command)
-    (define-key map (kbd "h") #'etaf-reader-backward-char-command)
-    (define-key map (kbd "l") #'etaf-reader-forward-char-command)
     ;; Upper case always moves between chapters, selection or not.
     (define-key map (kbd "H") #'etaf-reader-chapter-backward-command)
     (define-key map (kbd "L") #'etaf-reader-chapter-forward-command)
-    (define-key map (kbd "<left>") #'etaf-reader-previous-page-command)
-    (define-key map (kbd "<right>") #'etaf-reader-next-page-command)
-    (define-key map (kbd "<down>") #'etaf-reader-forward-line-command)
-    (define-key map (kbd "<up>") #'etaf-reader-backward-line-command)
     (define-key map (kbd "v") #'etaf-reader-toggle-selection-command)
     (define-key map (kbd "RET") #'etaf-reader-confirm-selection-command)
     (define-key map (kbd "C-c C-k") #'etaf-reader-cancel-selection-command)
@@ -253,6 +245,21 @@ between them).")
              (t (etaf-reader-clear-selection session)
                 (etaf-reader-previous-page session)))))))
 
+(defun etaf-reader--direction (direction)
+  "Run the reader's DIRECTION movement and return `handled'.
+Up and down scroll or extend the selection a line; left and right turn pages
+unless a keyboard selection is active, when they move its cursor."
+  (pcase direction
+    ('up (etaf-reader-backward-line-command))
+    ('down (etaf-reader-forward-line-command))
+    ('left (if (etaf-reader--read (etaf-reader--current) :cursor)
+               (etaf-reader-backward-char-command)
+             (etaf-reader-previous-page-command)))
+    ('right (if (etaf-reader--read (etaf-reader--current) :cursor)
+                (etaf-reader-forward-char-command)
+              (etaf-reader-next-page-command))))
+  'handled)
+
 (defun etaf-reader-forward-line-command ()
   "Move down one line, or extend the keyboard selection."
   (interactive)
@@ -315,7 +322,7 @@ between them).")
            (etaf-reader-clear-selection session)
          (etaf-reader-begin-selection session
                                       (etaf-reader--read session :line) 0)
-         (etaf-reader-message session "hjkl 移动选择，回车打开工具条，C-c C-k 取消"))))))
+         (etaf-reader-message session "方向键移动选择，回车打开工具条，C-c C-k 取消"))))))
 
 (defun etaf-reader-confirm-selection-command ()
   "Open the annotation toolbar for the current selection."

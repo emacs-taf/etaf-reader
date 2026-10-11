@@ -55,7 +55,7 @@ percentage of the whole book.
 
 Select text with the mouse: drag from the first character to the last, and the
 toolbar appears above or below the line when the drag ends. Keyboard users
-press `v` to anchor the selection, move with `h` `j` `k` `l`, confirm with
+press `v` to anchor the selection, move with the arrow keys, confirm with
 `RET`, and cancel with `C-c C-k`.
 
 The toolbar offers six colors and three styles — `highlight`, `underline`,
