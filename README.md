@@ -100,9 +100,9 @@ cd ebook-parse-cli && ./scripts/install-cli.sh   # links ~/.local/bin/ebook-pars
 | `s` / `n` / `N` | in-book search, next match, previous match |
 | `c` / `a` / `B` / `S` | contents / notes / bookmarks / search results |
 | `b`, `g`, `u` | bookmark the page, jump to a percentage, return before a jump |
-| `o`, `C-g` | reading settings, close the current pane/selection |
+| `o`, `C-c C-k` | reading settings, close the current pane/selection |
 | `z`, `[`, `]`, `t` | mode, width, width, palette |
-| `f`, `i`, `E`, `?`, `q` | shelf, rescan, export notes, help, close |
+| `f`, `i`, `E`, `C-c h`, `q` | shelf, rescan, export notes, help, close |
 
 ## Checks
 

@@ -148,7 +148,7 @@ borrowed by the minibuffer keep the metrics the session already committed."
     (define-key map (kbd "<up>") #'etaf-reader-backward-line-command)
     (define-key map (kbd "v") #'etaf-reader-toggle-selection-command)
     (define-key map (kbd "RET") #'etaf-reader-confirm-selection-command)
-    (define-key map (kbd "C-g") #'etaf-reader-cancel-selection-command)
+    (define-key map (kbd "C-c C-k") #'etaf-reader-cancel-selection-command)
     (define-key map (kbd "s") #'etaf-reader-search-command)
     (define-key map (kbd "n") #'etaf-reader-search-next-command)
     (define-key map (kbd "N") #'etaf-reader-search-previous-command)
@@ -167,7 +167,7 @@ borrowed by the minibuffer keep the metrics the session already committed."
     (define-key map (kbd "f") #'etaf-reader-shelf-command)
     (define-key map (kbd "i") #'etaf-reader-scan-command)
     (define-key map (kbd "E") #'etaf-reader-export-command)
-    (define-key map (kbd "?") #'etaf-reader-help-command)
+    (define-key map (kbd "C-c h") #'etaf-reader-help-command)
     (define-key map (kbd "q") #'etaf-reader-close)
     (define-key map (kbd "<wheel-down>") #'etaf-reader-wheel-down-command)
     (define-key map (kbd "<wheel-up>") #'etaf-reader-wheel-up-command)
@@ -315,7 +315,7 @@ between them).")
            (etaf-reader-clear-selection session)
          (etaf-reader-begin-selection session
                                       (etaf-reader--read session :line) 0)
-         (etaf-reader-message session "hjkl 移动选择，回车打开工具条，C-g 取消"))))))
+         (etaf-reader-message session "hjkl 移动选择，回车打开工具条，C-c C-k 取消"))))))
 
 (defun etaf-reader-confirm-selection-command ()
   "Open the annotation toolbar for the current selection."

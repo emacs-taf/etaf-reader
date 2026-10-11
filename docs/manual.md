@@ -56,7 +56,7 @@ percentage of the whole book.
 Select text with the mouse: drag from the first character to the last, and the
 toolbar appears above or below the line when the drag ends. Keyboard users
 press `v` to anchor the selection, move with `h` `j` `k` `l`, confirm with
-`RET`, and cancel with `C-g`.
+`RET`, and cancel with `C-c C-k`.
 
 The toolbar offers six colors and three styles — `highlight`, `underline`,
 `wavy` — plus copy, write a thought, search the book, and delete. Clicking an
@@ -78,8 +78,8 @@ contents at the current chapter; `b` bookmarks the current page and `B` opens
 the bookmark list. Contents, notes, search results and bookmarks have page
 controls. Choose an item to jump to its location; `u` returns to the position
 before a navigation jump. The bookmark dialog also offers deletion, and the
-notes dialog opens annotation editing or exports Markdown. `C-g` closes a pane
-or cancels a selection without closing the book.
+notes dialog opens annotation editing or exports Markdown. `Esc` closes a pane;
+`C-c C-k` cancels a selection without closing the book.
 
 ## Scripting
 

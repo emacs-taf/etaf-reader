@@ -452,7 +452,7 @@
               (with-current-buffer buffer (etaf-focus runtime (car control))))
             (with-current-buffer buffer (execute-kbd-macro (kbd "o")))
             (should (eq 'settings (plist-get (etaf-reader-state session) :pane)))
-            (with-current-buffer buffer (execute-kbd-macro (kbd "C-g")))
+            (with-current-buffer buffer (execute-kbd-macro (kbd "<escape>")))
             (should-not (plist-get (etaf-reader-state session) :pane)))
         (when (buffer-live-p buffer)
           (with-current-buffer buffer (etaf-reader-close)))
