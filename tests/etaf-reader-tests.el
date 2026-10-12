@@ -107,7 +107,10 @@
   (declare (indent 0) (debug (body)))
   `(let* ((folder (make-temp-file "etaf-reader-tests" t))
           (etaf-reader-store-file (expand-file-name "library.sqlite3" folder))
-          (etaf-reader-cache-directory (expand-file-name "cache" folder)))
+          (etaf-reader-cache-directory (expand-file-name "cache" folder))
+          ;; The scripted parser ignores the directory, but the scan visits only
+          ;; directories that exist; never depend on the user's ~/ebooks.
+          (etaf-reader-library-directories (list folder)))
      (unwind-protect
          (progn ,@body)
        (delete-directory folder t))))
