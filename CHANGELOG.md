@@ -40,6 +40,12 @@
   unconditional whole-view fallback for styled pages; latency must still be
   verified with the maintained keyboard workload on the target display.
 
+### Changed
+
+- Reading settings, the shortcut help and content panels open over the
+  reading surface with the shared modal backdrop: the page stays visible and
+  dimmed instead of losing its background, and closing restores it.
+
 ### Added
 
 - A reading toolbar, paper-like columns and comfortable paragraph spacing.

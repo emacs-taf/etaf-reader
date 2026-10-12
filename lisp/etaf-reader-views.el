@@ -595,12 +595,12 @@ Host per slot also keeps blank and final-page slots addressable."
         ('settings
          (etaf-view
           (etaf-dialog :open t :title "阅读设置" :width (list 'ch width)
-                       :close-label "关闭" :compact t :backdrop nil :on-close close
+                       :close-label "关闭" :compact t :on-close close
             (expr (etaf-reader--view-settings session)))))
         ('help
          (etaf-view
           (etaf-dialog :open t :title "快捷键" :width (list 'ch width)
-                       :close-label "关闭" :backdrop nil :on-close close
+                       :close-label "关闭" :on-close close
             (column :width 'stretch :item-gap '(lh 0)
               (text "空格 / 退格     下一页 / 上一页")
               (text "方向键 / H L    逐行 / 换章")
@@ -623,7 +623,7 @@ Host per slot also keeps blank and final-page slots addressable."
             (etaf-dialog :open t :width (list 'ch width)
                          :height (list 'lh (+ 8 (* size 3)
                                              (if (memq pane '(notes bookmarks)) 3 0)))
-                         :close-label "关闭" :compact t :backdrop nil :on-close close
+                         :close-label "关闭" :compact t :on-close close
                          :title (pcase pane ('toc "目录") ('notes "笔记与划线")
                                        ('bookmarks "书签") (_ "搜索结果"))
               (column :width 'stretch :item-gap '(lh 1)
