@@ -146,7 +146,7 @@ or foreground latency. Close the dedicated instance after verification.
 
 | Symptom | Cause and action |
 | --- | --- |
-| `找不到电子书解析器` | install the `ebook-parse` skill or set `etaf-reader-parser-command` |
+| `找不到电子书解析器` | install the `ebook-parse` CLI (see README) or set `etaf-reader-parser-command` |
 | a PDF shows no text | scanned PDF; run OCR first, or open another file |
 | a book opens with one huge chapter | the source EPUB packs many chapters into one spine document; use search and bookmarks |
 | `无法打开书库数据库` | the SQLite file is locked or corrupt; move it aside to start a fresh library |

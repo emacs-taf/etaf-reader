@@ -45,7 +45,7 @@ Selected text opens the annotation toolbar above or below the line:
 | --- | --- | --- |
 | Emacs 29.1 or newer | the ETAF runtime and built-in SQLite support | `emacs --version` |
 | `etaf`, `etaf-ui`, `etaf-db`, `ebox`, `ecss` | the framework; each root entry must be on `load-path` | every checkout is readable |
-| `ebook-parse` skill | parses local ebook files | `pi-skill ebook-parse check` |
+| `ebook-parse` backend | parses local ebook files | `ebook-parse check` (CLI) or the checkout's `scripts/ebook_parse.py` exists |
 | poppler | PDF text extraction | `pdftotext -v` |
 
 ## Installation
@@ -68,14 +68,27 @@ etaf-reader-open-file` imports and opens one file. Point
 `etaf-reader-theme` and `etaf-reader-parser-command` at your own setup.
 
 The parser is found automatically: `etaf-reader-parser-command` first, then
-`PI_READER_PARSER`, the installed `ebook-parse` command, then the shared skill
-checkout under `~/.pi/agent/skills/ebook-parse`.
+`PI_READER_PARSER`, the installed `ebook-parse` command (a Pi setup installs
+that shim too), then a shared skill checkout under
+`~/.pi/agent/skills/ebook-parse`.
 
-Without a Pi checkout, install the parser as a standalone CLI:
+Install it once, either as a standalone CLI or as a Pi skill package:
 
 ```sh
+# standalone CLI (no Pi; the app then finds `ebook-parse` on PATH)
 git clone https://forgejo.vhkd.top/pi-hub/ebook-parse-cli.git
 cd ebook-parse-cli && ./scripts/install-cli.sh   # links ~/.local/bin/ebook-parse
+
+# or with Pi
+pi install git:forgejo.vhkd.top/pi-hub/ebook-parse@v0.1.0
+```
+
+If the app cannot find a `pi install`ed parser, point it at the script:
+
+```elisp
+(setq etaf-reader-parser-command
+      (list (expand-file-name
+             "~/.pi/agent/git/forgejo.vhkd.top/pi-hub/ebook-parse/skills/ebook-parse/scripts/ebook_parse.py")))
 ```
 
 ## Minimal example
