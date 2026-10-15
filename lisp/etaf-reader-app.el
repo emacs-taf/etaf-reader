@@ -131,40 +131,44 @@ borrowed by the minibuffer keep the metrics the session already committed."
 
 (defvar etaf-reader-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "SPC") #'etaf-reader-next-page-command)
-    (define-key map (kbd "<next>") #'etaf-reader-next-page-command)
-    (define-key map (kbd "DEL") #'etaf-reader-previous-page-command)
-    (define-key map (kbd "<prior>") #'etaf-reader-previous-page-command)
-    ;; Upper case always moves between chapters, selection or not.
-    (define-key map (kbd "H") #'etaf-reader-chapter-backward-command)
-    (define-key map (kbd "L") #'etaf-reader-chapter-forward-command)
-    (define-key map (kbd "v") #'etaf-reader-toggle-selection-command)
-    (define-key map (kbd "RET") #'etaf-reader-confirm-selection-command)
-    (define-key map (kbd "C-c C-k") #'etaf-reader-cancel-selection-command)
-    (define-key map (kbd "s") #'etaf-reader-search-command)
-    (define-key map (kbd "n") #'etaf-reader-search-next-command)
-    (define-key map (kbd "N") #'etaf-reader-search-previous-command)
-    (define-key map (kbd "c") #'etaf-reader-toc-command)
-    (define-key map (kbd "a") #'etaf-reader-notes-command)
-    (define-key map (kbd "b") #'etaf-reader-bookmark-command)
-    (define-key map (kbd "B") #'etaf-reader-bookmarks-command)
-    (define-key map (kbd "S") #'etaf-reader-search-results-command)
-    (define-key map (kbd "o") #'etaf-reader-settings-command)
-    (define-key map (kbd "u") #'etaf-reader-jump-back-command)
-    (define-key map (kbd "g") #'etaf-reader-goto-percent-command)
-    (define-key map (kbd "z") #'etaf-reader-toggle-mode-command)
-    (define-key map (kbd "[") #'etaf-reader-narrower-command)
-    (define-key map (kbd "]") #'etaf-reader-wider-command)
-    (define-key map (kbd "t") #'etaf-reader-toggle-theme-command)
-    (define-key map (kbd "f") #'etaf-reader-shelf-command)
-    (define-key map (kbd "i") #'etaf-reader-scan-command)
-    (define-key map (kbd "E") #'etaf-reader-export-command)
-    (define-key map (kbd "C-c h") #'etaf-reader-help-command)
-    (define-key map (kbd "q") #'etaf-reader-close)
-    (define-key map (kbd "<wheel-down>") #'etaf-reader-wheel-down-command)
-    (define-key map (kbd "<wheel-up>") #'etaf-reader-wheel-up-command)
-    (define-key map (kbd "<mouse-5>") #'etaf-reader-wheel-down-command)
-    (define-key map (kbd "<mouse-4>") #'etaf-reader-wheel-up-command)
+    (dolist (binding '(("SPC" etaf-reader-next-page-command "阅读下一页")
+                       ("S-SPC" etaf-reader-previous-page-command "阅读上一页")
+                       ("C-v" etaf-reader-next-page-command "阅读下一页")
+                       ("M-v" etaf-reader-previous-page-command "阅读上一页")
+                       ("<next>" etaf-reader-next-page-command "阅读下一页")
+                       ("DEL" etaf-reader-previous-page-command "阅读上一页")
+                       ("<prior>" etaf-reader-previous-page-command "阅读上一页")
+                       ("H" etaf-reader-chapter-backward-command "上一章")
+                       ("L" etaf-reader-chapter-forward-command "下一章")
+                       ("v" etaf-reader-toggle-selection-command "切换文字选择")
+                       ("RET" etaf-reader-return-command "确认选区／激活控件")
+                       ("C-c C-k" etaf-reader-cancel-selection-command "关闭面板／取消选区")
+                       ("s" etaf-reader-search-command "搜索全书")
+                       ("n" etaf-reader-search-next-command "下一个匹配")
+                       ("N" etaf-reader-search-previous-command "上一个匹配")
+                       ("c" etaf-reader-toc-command "目录")
+                       ("a" etaf-reader-notes-command "笔记与划线")
+                       ("b" etaf-reader-bookmark-command "收藏当前页")
+                       ("B" etaf-reader-bookmarks-command "书签列表")
+                       ("S" etaf-reader-search-results-command "搜索结果")
+                       ("o" etaf-reader-settings-command "阅读设置")
+                       ("u" etaf-reader-jump-back-command "返回跳转前")
+                       ("g" etaf-reader-goto-percent-command "跳转阅读进度")
+                       ("z" etaf-reader-toggle-mode-command "切换分页／滚动")
+                       ("[" etaf-reader-narrower-command "收窄阅读栏")
+                       ("]" etaf-reader-wider-command "加宽阅读栏")
+                       ("t" etaf-reader-toggle-theme-command "切换阅读主题")
+                       ("f" etaf-reader-shelf-command "返回书库")
+                       ("i" etaf-reader-scan-command "重新扫描书库")
+                       ("E" etaf-reader-export-command "导出笔记")
+                       ("C-c h" etaf-help "查看快捷键")
+                       ("q" etaf-reader-close "关闭阅读器")
+                       ("<wheel-down>" etaf-reader-wheel-down-command "向下阅读")
+                       ("<wheel-up>" etaf-reader-wheel-up-command "向上阅读")
+                       ("<mouse-5>" etaf-reader-wheel-down-command "向下阅读")
+                       ("<mouse-4>" etaf-reader-wheel-up-command "向上阅读")))
+      (define-key map (kbd (car binding))
+                  (list 'menu-item (nth 2 binding) (nth 1 binding))))
     map)
   "Keymap of a buffer opened by `etaf-reader-open'.")
 
@@ -173,28 +177,7 @@ borrowed by the minibuffer keep the metrics the session already committed."
 ;;; ---------------------------------------------------------------------------
 
 (defvar etaf-reader--command-maps
-  (list (cons 'etaf-reader--session
-              (let ((map (make-sparse-keymap)))
-                ;; Focused controls carry a native keymap above the major-mode
-                ;; map.  Keep every reader command available there too, while
-                ;; leaving TAB and unbound pointer events to the renderer.
-                (set-keymap-parent map etaf-reader-mode-map)
-                ;; The renderer's minor-mode map owns these keys and wins over
-                ;; a major-mode map; an `emulation-mode-map-alists' entry wins
-                ;; over every minor mode, so the reader replaces them here.
-                (define-key map (kbd "SPC") #'etaf-reader-next-page-command)
-                (define-key map (kbd "S-SPC") #'etaf-reader-previous-page-command)
-                (define-key map (kbd "C-v") #'etaf-reader-next-page-command)
-                (define-key map (kbd "M-v") #'etaf-reader-previous-page-command)
-                (define-key map (kbd "DEL") #'etaf-reader-previous-page-command)
-                (define-key map (kbd "n") #'etaf-reader-search-next-command)
-                (define-key map (kbd "q") #'etaf-reader-close)
-                (define-key map (kbd "RET") #'etaf-reader-return-command)
-                (define-key map [wheel-up] #'etaf-reader-wheel-up-command)
-                (define-key map [wheel-down] #'etaf-reader-wheel-down-command)
-                (define-key map [mouse-4] #'etaf-reader-wheel-up-command)
-                (define-key map [mouse-5] #'etaf-reader-wheel-down-command)
-                map)))
+  (list (cons 'etaf-reader--session etaf-reader-mode-map))
   "Reader bindings that must beat the renderer's own minor-mode map.
 The alist's key is `etaf-reader--session', the buffer-local variable every
 reader buffer owns, so the entry is active exactly there.  TAB focus cycling
@@ -489,14 +472,6 @@ unless a keyboard selection is active, when they move its cursor."
             (file (read-file-name "导出到：" (file-name-directory default)
                                   default nil (file-name-nondirectory default))))
        (etaf-reader-export-notes session file)))))
-
-(defun etaf-reader-help-command ()
-  "Show the key help pane."
-  (interactive)
-  (etaf-reader--call
-   (lambda ()
-     (let ((session (etaf-reader--current)))
-       (etaf-reader-show-pane session 'help)))))
 
 (defun etaf-reader--wheel (delta)
   "Scroll by DELTA lines (or turn pages)."

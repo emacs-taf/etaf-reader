@@ -437,7 +437,7 @@
             (should (= 2 (plist-get (etaf-reader-state session) :chapter)))
             (etaf-reader-jump-back session)
             (should (= 0 (plist-get (etaf-reader-state session) :chapter)))
-            (dolist (pane '(toc notes bookmarks search settings help))
+            (dolist (pane '(toc notes bookmarks search settings))
               (etaf-reader-show-pane session pane)
               (should (eq pane (plist-get (etaf-reader-state session) :pane)))
               (with-current-buffer buffer
@@ -491,6 +491,62 @@
                 (should (= 2 (plist-get (etaf-reader-state reader) :chapter))))))
         (delete-directory first-root t)
         (delete-directory second-root t)))))
+
+(ert-deftest etaf-reader-tests-help-stays-in-reader ()
+  "All help requests preserve reading state and use the same mounted modal."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-help-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create :parser (etaf-reader-tests--parser folder))))
+           buffer)
+      (unwind-protect
+          (save-window-excursion
+            (should-error (etaf-reader-show-pane session 'help) :type 'etaf-reader-error)
+            (setq buffer (etaf-reader-open session))
+            (with-current-buffer buffer
+              (let* ((runtime (etaf-runtime-for-buffer buffer))
+                     (windows (window-list))
+                     (before (etaf-reader-state session)))
+                (etaf-focus-next runtime)
+                (let ((focus (etaf-focused-host-ref runtime)))
+                  (dolist (open (list (lambda () (execute-kbd-macro (kbd "?")))
+                                     (lambda () (execute-kbd-macro (kbd "C-c h")))
+                                     (lambda () (etaf-reader-show-pane session 'help))))
+                    (funcall open)
+                    (let* ((data (etaf-help-data runtime))
+                           (entries (apply #'append
+                                           (mapcar (lambda (group) (plist-get group :entries))
+                                                   (plist-get data :groups))))
+                           (chapter (cl-find "H" entries :test #'equal
+                                             :key (lambda (entry) (plist-get entry :key))))
+                           (up (cl-find "M-v" entries :test #'equal
+                                        :key (lambda (entry) (plist-get entry :key))))
+                           (same-runtime (eq runtime (etaf-runtime-for-buffer buffer))))
+                      (should same-runtime)
+                      (should (eq (window-buffer) buffer))
+                      (should (equal windows (window-list)))
+                      (should (equal (plist-get data :title) "电子书阅读器"))
+                      (should (equal (plist-get chapter :label) "上一章"))
+                      (should (equal (plist-get up :label) "阅读上一页")))
+                    (execute-kbd-macro (kbd "/"))
+                    (execute-kbd-macro "?")
+                    (execute-kbd-macro (kbd "<escape>"))
+                    (let ((editing (etaf-text-input-active-p runtime)))
+                      (should-not editing))
+                    (should (string-match-p "快捷键 · 只读"
+                                            (buffer-substring-no-properties (point-min) (point-max))))
+                    (execute-kbd-macro (kbd "<escape>"))
+                    (let ((restored (equal focus (etaf-focused-host-ref runtime)))
+                          (after (etaf-reader-state session)))
+                      (should restored)
+                      (should (equal before after)))))
+                (etaf-reader-show-pane session 'help)
+                (etaf-reader-show-pane session nil)
+                (let ((open (etaf-help-close runtime)))
+                  (should-not open)))))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
+        (delete-directory folder t)))))
 
 (provide 'etaf-reader-tests)
 ;;; etaf-reader-tests.el ends here

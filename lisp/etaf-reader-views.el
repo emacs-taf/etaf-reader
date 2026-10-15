@@ -558,7 +558,7 @@ Host per slot also keeps blank and final-page slots addressable."
                       :on-press (lambda () (etaf-reader-filter-library session ""))))))))
 
 ;;; ---------------------------------------------------------------------------
-;;; Panes (contents / notes / help)
+;;; Navigation and settings panes
 ;;; ---------------------------------------------------------------------------
 
 (defun etaf-reader--view-settings (session)
@@ -597,21 +597,6 @@ Host per slot also keeps blank and final-page slots addressable."
           (etaf-dialog :open t :title "阅读设置" :width (list 'ch width)
                        :close-label "关闭" :compact t :on-close close
             (expr (etaf-reader--view-settings session)))))
-        ('help
-         (etaf-view
-          (etaf-dialog :open t :title "快捷键" :width (list 'ch width)
-                       :close-label "关闭" :on-close close
-            (column :width 'stretch :item-gap '(lh 0)
-              (text "空格 / 退格     下一页 / 上一页")
-              (text "方向键 / H L    逐行 / 换章")
-              (text "v + 方向键 + 回车 选择并标注（C-c C-k 取消）")
-              (text "s / n N / S     搜索 / 跳转 / 结果列表")
-              (text "c / a / B       目录 / 笔记 / 书签")
-              (text "b / u           加书签 / 返回跳转前")
-              (text "o / t / z       设置 / 主题 / 阅读模式")
-              (text "[ ] / g         栏宽 / 跳到百分比")
-              (text "f / i / E / C-c h 书库 / 扫描 / 导出笔记 / 帮助")
-              (text "Esc / q         关闭面板 / 退出阅读器")))))
         (_
          (let* ((items (etaf-reader--pane-items session))
                 (size (etaf-reader--pane-page-size session))
@@ -672,6 +657,10 @@ Host per slot also keeps blank and final-page slots addressable."
     (etaf-node
      'box
      (list :width 'stretch :height 'stretch :overflow 'hidden
+           :aria-label "电子书阅读器"
+           :help '("书库扫描本地电子书；进度、书签、划线和阅读设置保存在本地数据库。"
+                   "选择文字后可标注或添加想法；标注跟随章节与文字位置，窗口重排不改变锚点。"
+                   "目录、笔记、书签与搜索结果支持分页，跳转后可返回原阅读位置。")
            :background-color (etaf-reader-color :bg (etaf-reader--read session :theme)))
      (delq nil
            (if (eq view 'reader)

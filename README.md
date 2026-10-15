@@ -115,7 +115,13 @@ If the app cannot find a `pi install`ed parser, point it at the script:
 | `b`, `g`, `u` | bookmark the page, jump to a percentage, return before a jump |
 | `o`, `C-c C-k` | reading settings, close the current pane/selection |
 | `z`, `[`, `]`, `t` | mode, width, width, palette |
-| `f`, `i`, `E`, `C-c h`, `q` | shelf, rescan, export notes, help, close |
+| `f`, `i`, `E`, `?` / `C-c h`, `q` | shelf, rescan, export notes, help, close |
+
+Both help keys and **More → Shortcuts** open the same searchable, read-only
+modal inside the reader, without splitting the Emacs window. `/` searches
+current effective bindings; Escape leaves search editing first, then closes
+help and restores focus. Clicking the backdrop also closes help. The dialog
+uses two columns in wide windows and one scrolling column in compact ones.
 
 ## Checks
 

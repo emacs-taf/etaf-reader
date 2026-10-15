@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- `?`, `C-c h` and More → Shortcuts share a searchable, read-only help modal
+  inside the reader. Effective bindings supply its short labels; Escape or
+  an outside click closes it and restores focus.
+- `etaf-reader-show-pane` with `help` now opens that modal without setting
+  `:pane` to `help`; it requires a mounted session. Use `etaf-help-close` to
+  close help alone, or pass nil to `etaf-reader-show-pane` to close all panes.
+
 ### Fixed
 
 - The minibuffer and echo area borrow window lines without shrinking the
@@ -16,8 +25,7 @@
   reads cached rows, and store work happens before mounting.
 - `SPC`, `DEL`, the page keys, `n`, `q`, `RET` and the wheel are no longer
   shadowed by the renderer's minor-mode map; `RET` confirms a selection or
-  activates the focused control, and `H`/`L` move between chapters as the help
-  pane documents.
+  activates the focused control, and `H`/`L` move between chapters.
 - Line kinds are real symbols (`body`, `heading`, `quote`, `pre`), so headings
   render bold, quotes get their bar, and the page-turn fast path can classify
   a window.

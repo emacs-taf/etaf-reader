@@ -101,29 +101,38 @@ The zero-based page index is clamped to the current filtered result."
 (defun etaf-reader-show-pane (session pane)
   "Show PANE in SESSION, or close it when nil or already open.
 PANE is toc, notes, bookmarks, search, settings or help. Data is loaded before
-publication; long lists are paged rather than clipped."
+publication; long lists are paged rather than clipped. Help requires a mounted
+reader and opens the shared modal without replacing the navigation pane.
+Nil also closes help."
   (unless (memq pane '(nil toc notes bookmarks search settings help))
     (signal 'etaf-reader-error '("未知阅读面板")))
   (when (and (memq pane '(toc notes bookmarks search))
              (null (etaf-reader--read session :book)))
     (signal 'etaf-reader-error '("请先打开一本书")))
-  (let ((etaf-reader-store-file (plist-get session :store-file)))
-   (etaf-batch
-    (pcase pane
-      ('notes
-       (etaf-reader--write session :book-notes
-                           (etaf-reader-store-annotations
-                            (plist-get (etaf-reader--read session :book) :id))))
-      ('bookmarks
-       (etaf-reader--write session :bookmarks
-                           (etaf-reader-store-bookmarks
-                            (plist-get (etaf-reader--read session :book) :id)))))
-    (etaf-reader--write session :pane-page
-                        (if (eq pane 'toc)
-                            (/ (or (plist-get (etaf-reader--read session :chapter) :index) 0)
-                               (etaf-reader--pane-page-size session)) 0))
-    (etaf-reader--write session :pane
-                        (unless (eq pane (etaf-reader--read session :pane)) pane)))))
+  (let* ((buffer (plist-get session :buffer))
+         (runtime (and (buffer-live-p buffer) (etaf-runtime-for-buffer buffer))))
+    (if (eq pane 'help)
+        (if runtime
+            (etaf-help runtime)
+          (signal 'etaf-reader-error '("请先打开阅读器再查看帮助")))
+      (when (and (null pane) runtime) (etaf-help-close runtime))
+      (let ((etaf-reader-store-file (plist-get session :store-file)))
+        (etaf-batch
+          (pcase pane
+            ('notes
+             (etaf-reader--write session :book-notes
+                                 (etaf-reader-store-annotations
+                                  (plist-get (etaf-reader--read session :book) :id))))
+            ('bookmarks
+             (etaf-reader--write session :bookmarks
+                                 (etaf-reader-store-bookmarks
+                                  (plist-get (etaf-reader--read session :book) :id)))))
+          (etaf-reader--write session :pane-page
+                              (if (eq pane 'toc)
+                                  (/ (or (plist-get (etaf-reader--read session :chapter) :index) 0)
+                                     (etaf-reader--pane-page-size session)) 0))
+          (etaf-reader--write session :pane
+                              (unless (eq pane (etaf-reader--read session :pane)) pane)))))))
 
 (defun etaf-reader--remember-position (session)
   "Push SESSION's current reading position onto bounded navigation history."

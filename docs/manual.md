@@ -81,6 +81,20 @@ before a navigation jump. The bookmark dialog also offers deletion, and the
 notes dialog opens annotation editing or exports Markdown. `Esc` closes a pane;
 `C-c C-k` cancels a selection without closing the book.
 
+## Keyboard help
+
+`?`, `C-c h` and **More → Shortcuts** open the same read-only help modal in the
+current reader buffer. Labels come from effective bindings, including local
+keymap overrides. `/` searches; Escape leaves search editing first, then
+closes the modal and restores the reader focus. An outside click also closes
+help without activating the background. Wide windows show two columns;
+compact windows use one scrolling column, following the reading theme.
+
+For a mounted session, `(etaf-reader-show-pane reader 'help)` opens this same
+modal without changing its navigation pane. Repeating the request reuses it;
+`(etaf-reader-show-pane reader nil)` closes help and the navigation pane.
+Headless sessions have no help surface and signal `etaf-reader-error`.
+
 ## Scripting
 
 A session needs no buffer or timer until mounted. Its reading preferences are

@@ -141,7 +141,10 @@
 ;; Move the library by DELTA pages, clamp at the ends and return its page.
 ;;
 ;; Function: etaf-reader-show-pane (session pane)
-;; Toggle toc, notes, bookmarks, search, settings or help; nil closes it.
+;; Toggle toc, notes, bookmarks, search or settings. Help opens the shared
+;; read-only modal in SESSION's mounted buffer, returning that buffer without
+;; changing :pane; repeated help requests reuse it. A headless help request
+;; signals etaf-reader-error. Nil closes both help and the navigation pane.
 ;; Reading navigation requires an open book. Storage is read before rendering.
 ;;
 ;; Function: etaf-reader-jump (session chapter offset)
