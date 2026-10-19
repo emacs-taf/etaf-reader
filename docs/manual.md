@@ -56,7 +56,9 @@ percentage of the whole book.
 Select text with the mouse: drag from the first character to the last, and the
 toolbar appears above or below the line when the drag ends. Keyboard users
 press `v` to anchor the selection, move with the arrow keys, confirm with
-`RET`, and cancel with `C-c C-k`.
+`RET`, and cancel with `C-c C-k`. The arrows act on the page wherever point
+rests; only a focused toolbar control without an active selection takes them
+for focus movement.
 
 The toolbar offers six colors and three styles — `highlight`, `underline`,
 `wavy` — plus copy, write a thought, search the book, and delete. Clicking an

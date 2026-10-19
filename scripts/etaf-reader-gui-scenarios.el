@@ -101,7 +101,7 @@ bookmark/annotation. It never changes FILE. No application focus is requested."
         (list "shelf-next-page" (lambda (c) (etaf-reader-gui--activate c "下一页")) "本地书库")
         (list "library-search" (lambda (c) (etaf-reader-gui--input c "s" query)) title)
         (list "resume-book" (lambda (c) (etaf-reader-gui--activate c title)) title)
-        (list "selection" (lambda (c) (etaf-reader-gui--keys c "v l l l RET")) "高亮")
+        (list "selection" (lambda (c) (etaf-reader-gui--keys c "v <right> <right> <right> RET")) "高亮")
         (list "highlight" (lambda (c) (etaf-reader-gui--activate c "高亮")) title)
         (list "notes" (lambda (c) (etaf-reader-gui--keys c "a")) "笔记与划线")
         (list "close-notes" (lambda (c) (etaf-reader-gui--keys c "<escape>")) title)

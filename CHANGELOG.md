@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- The arrow keys turn pages and extend a keyboard selection wherever point
+  rests. They used to reach the page only with point inside the text body,
+  and otherwise moved focus to a toolbar control.
 - `t` repaints the cells beyond the page in the new theme instead of keeping
   the theme the reader opened with.
 - The minibuffer and echo area borrow window lines without shrinking the

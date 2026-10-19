@@ -199,9 +199,18 @@ RET, and the reader's RET dispatches between a selection and activation.")
                 (etaf-reader-previous-page session)))))))
 
 (defun etaf-reader--direction (direction)
-  "Run the reader's DIRECTION movement and return `handled'.
+  "Run the reader's DIRECTION movement and return `handled' or `release'.
 Up and down scroll or extend the selection a line; left and right turn pages
-unless a keyboard selection is active, when they move its cursor."
+unless a keyboard selection is active, when they move its cursor.  Without a
+selection, a focused control releases the arrows to focus movement."
+  (if (and (etaf-focused-host-ref)
+           (not (etaf-reader--read (etaf-reader--current) :cursor)))
+      'release
+    (etaf-reader--move direction)
+    'handled))
+
+(defun etaf-reader--move (direction)
+  "Move the page or the keyboard selection in DIRECTION."
   (pcase direction
     ('up (etaf-reader-backward-line-command))
     ('down (etaf-reader-forward-line-command))
@@ -210,8 +219,7 @@ unless a keyboard selection is active, when they move its cursor."
              (etaf-reader-previous-page-command)))
     ('right (if (etaf-reader--read (etaf-reader--current) :cursor)
                 (etaf-reader-forward-char-command)
-              (etaf-reader-next-page-command))))
-  'handled)
+              (etaf-reader-next-page-command)))))
 
 (defun etaf-reader-forward-line-command ()
   "Move down one line, or extend the keyboard selection."

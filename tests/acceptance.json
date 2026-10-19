@@ -37,6 +37,11 @@
       "purpose": "The reader's root keys beat the renderer's map, t repaints the canvas beyond the page in the new theme, and q closes the reader."
     },
     {
+      "name": "etaf-reader-tests-arrows-reach-the-page",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "With no control focused, arrows turn the page from anywhere in the reader and extend a keyboard selection instead of moving focus."
+    },
+    {
       "name": "etaf-reader-tests-navigation-panes-and-return-position",
       "file": "tests/etaf-reader-tests.el",
       "purpose": "Mounted navigation dialogs and settings open and close through public actions and keys while preserving the reading page and jump history."

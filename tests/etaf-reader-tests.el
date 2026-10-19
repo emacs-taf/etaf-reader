@@ -448,6 +448,29 @@
           (with-current-buffer buffer (etaf-reader-close)))
         (delete-directory folder t)))))
 
+(ert-deftest etaf-reader-tests-arrows-reach-the-page ()
+  "Arrows turn the page and extend a selection wherever point rests."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-arrows-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create :parser (etaf-reader-tests--parser folder))))
+           buffer)
+      (unwind-protect
+          (save-window-excursion
+            (setq buffer (etaf-reader-open session))
+            (etaf-reader-set-metrics session 24 4 1 'narrow 'page)
+            (with-current-buffer buffer
+              (goto-char (point-min))
+              (let ((line (plist-get (etaf-reader-state session) :line)))
+                (execute-kbd-macro (kbd "<right>"))
+                (should-not (etaf-focused-host-ref))
+                (should (> (plist-get (etaf-reader-state session) :line) line)))
+              (execute-kbd-macro (kbd "v <down>"))
+              (should (plist-get (etaf-reader-state session) :selection))))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
+        (delete-directory folder t)))))
+
 (ert-deftest etaf-reader-tests-navigation-panes-and-return-position ()
   "Mounted navigation opens, pages and closes without losing the reading page."
   (etaf-reader-tests--with-environment

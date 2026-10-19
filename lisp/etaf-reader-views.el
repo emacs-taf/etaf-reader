@@ -388,7 +388,9 @@ rebuilding."
          (book (etaf-reader--read session :book))
          )
     (etaf-view
+     ;; Arrows reach the page wherever point rests, not only inside the body.
      (flex :flex-direction 'column :width 'stretch :height 'stretch
+           :on-direction #'etaf-reader--direction
            :background-color (etaf-reader-color :panel theme)
            :color (etaf-reader-color :ink theme) :gap '((lh 0) (ch 0))
        ;; Running head
@@ -435,7 +437,6 @@ rebuilding."
        (flex :ref 'reader-body :id "reader-body"
              :width 'stretch :flex-grow 1 :flex-basis '(lh 0)
              :min-height '(lh 0) :align-items 'stretch
-             :on-direction #'etaf-reader--direction
              :pointer 'text :on-drag (plist-get session :drag-handler)
              :gap (list '(lh 0) (list 'ch 2))
          (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0))
