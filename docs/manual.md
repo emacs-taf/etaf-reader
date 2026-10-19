@@ -122,8 +122,8 @@ shared driver:
 
 ```sh
 python3 scripts/performance.py run --mode batch \
-  --load-path etaf-apps/etaf-reader \
-  --scenario-file etaf-apps/etaf-reader/benchmarks/performance-scenarios.el \
+  --load-path etaf-reader \
+  --scenario-file etaf-reader/benchmarks/performance-scenarios.el \
   --scenario reader.page.styled --sets 3 --samples 30 --warmups 5
 ```
 
