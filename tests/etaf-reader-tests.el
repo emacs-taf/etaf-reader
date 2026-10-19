@@ -57,8 +57,10 @@
       (setq index (1+ index)))
     (nreverse blocks)))
 
-(defun etaf-reader-tests--parser (root &optional heading)
-  "Return a scripted parser whose single book lives under ROOT."
+(defun etaf-reader-tests--parser (root &optional heading image)
+  "Return a scripted parser whose single book lives under ROOT.
+HEADING turns each chapter's first block into a heading; IMAGE turns its
+second block into a picture."
   (let ((book-path (expand-file-name "fake-book.epub" root))
         (chapters etaf-reader-tests--chapters))
     (with-temp-file book-path (insert "fake epub"))
@@ -84,6 +86,8 @@
                               :blocks (let ((blocks (etaf-reader-tests--blocks text)))
                                         (when heading
                                           (setcdr (assq :type (car blocks)) "h1"))
+                                        (when (and image (cdr blocks))
+                                          (setcdr (assq :type (cadr blocks)) "img"))
                                         blocks)))))
              (push (list (cons :index index) (cons :title (nth 0 chapter))
                          (cons :chars (length text)) (cons :file file))
@@ -467,6 +471,36 @@
                 (should (> (plist-get (etaf-reader-state session) :line) line)))
               (execute-kbd-macro (kbd "v <down>"))
               (should (plist-get (etaf-reader-state session) :selection))))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
+        (delete-directory folder t)))))
+
+(ert-deftest etaf-reader-tests-pages-turn-past-pictures ()
+  "Pages turn onto, across and away from a picture line."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-pictures-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create
+                      :parser (etaf-reader-tests--parser folder nil t))))
+           buffer)
+      (unwind-protect
+          (save-window-excursion
+            (setq buffer (etaf-reader-open session))
+            (etaf-reader-set-metrics session 24 4 2 'wide 'page)
+            (let ((pictures 0) (lines nil))
+              (with-current-buffer buffer
+                (dotimes (_ 6)
+                  (let ((state (etaf-reader-state session)))
+                    (push (cons (plist-get state :chapter) (plist-get state :line))
+                          lines))
+                  (when (string-match-p "\\[图片" (buffer-substring-no-properties
+                                                   (point-min) (point-max)))
+                    (setq pictures (1+ pictures)))
+                  (execute-kbd-macro (kbd "SPC"))
+                  (should-not (string-prefix-p
+                               "出错" (or (plist-get (etaf-reader-state session) :message) "")))))
+              (should (> pictures 0))
+              (should (equal lines (delete-dups (copy-sequence lines))))))
         (when (buffer-live-p buffer)
           (with-current-buffer buffer (etaf-reader-close)))
         (delete-directory folder t)))))

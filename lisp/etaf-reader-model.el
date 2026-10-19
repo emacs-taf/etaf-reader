@@ -507,7 +507,14 @@ publish ordinarily instead."
     (when (and runtime (etaf-runtime-mounted-p runtime)
                (eq (etaf-reader--read session :view) 'reader)
                (null (etaf-reader--read session :pane))
-               (null (etaf-reader--read session :toolbar)))
+               (null (etaf-reader--read session :toolbar))
+               ;; Columns holding a picture render line by line instead of
+               ;; one retained text slot, on the new page or the shown one.
+               (not (cl-some (lambda (line) (eq (plist-get line :kind) 'img))
+                             (seq-take window (* rows spread))))
+               (cl-loop for column below spread
+                        always (etaf-runtime-host-props-for
+                                runtime (intern (format "reader-column-%d" column)))))
       (let ((updates (list (cons 'reader-page
                                  (concat (etaf-reader--page-label session) " · "
                                          (etaf-reader-percent-text session))))))

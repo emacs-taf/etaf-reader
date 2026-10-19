@@ -23,6 +23,8 @@
 
 ### Fixed
 
+- Pages turn when the shown or the next page holds a chapter picture. The
+  page turn used to stop with `Unknown committed Host reader-column-1`.
 - The arrow keys turn pages and extend a keyboard selection wherever point
   rests. They used to reach the page only with point inside the text body,
   and otherwise moved focus to a toolbar control.

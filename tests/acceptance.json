@@ -42,6 +42,11 @@
       "purpose": "With no control focused, arrows turn the page from anywhere in the reader and extend a keyboard selection instead of moving focus."
     },
     {
+      "name": "etaf-reader-tests-pages-turn-past-pictures",
+      "file": "tests/etaf-reader-tests.el",
+      "purpose": "SPC turns pages onto, across and away from a chapter picture without a retained-update error."
+    },
+    {
       "name": "etaf-reader-tests-navigation-panes-and-return-position",
       "file": "tests/etaf-reader-tests.el",
       "purpose": "Mounted navigation dialogs and settings open and close through public actions and keys while preserving the reading page and jump history."
