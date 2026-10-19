@@ -2,8 +2,8 @@
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Author: ETAF contributors
-;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (etaf "0.2.1") (etaf-ui "0.1.0") (etaf-db "0.1.0"))
+;; Version: 0.2.0
+;; Package-Requires: ((emacs "29.1") (etaf "0.3.0") (etaf-ui "0.2.0") (etaf-db "0.1.0"))
 ;; Keywords: hypermedia, ui
 ;; URL: https://github.com/emacs-taf/etaf-reader
 
@@ -49,8 +49,10 @@
 ;;
 ;; Function: etaf-reader-close ()
 ;;;###autoload (autoload 'etaf-reader-close "etaf-reader" nil t)
-;; Save the reading position and close the current reader.
+;; Save the reading position and close the open reader.
 ;; Unmounting releases the session's pending save timer and kills the buffer.
+;; Killing the reader buffer directly saves the position the same way.
+;; Signal `user-error' when no reader is open.
 ;; The library connection is cached for reuse by later sessions.
 ;;
 ;; Function: etaf-reader-create (&key parser theme)
@@ -232,9 +234,6 @@
 ;;
 ;; Variable: etaf-reader-cache-directory
 ;; Directory holding extracted book assets (covers and images).
-;;
-;; Variable: etaf-reader-mode-map
-;; Keymap of a buffer opened by `etaf-reader-open'.
 ;;
 ;; Error: etaf-reader-error
 ;; Invalid ETAF reader operation

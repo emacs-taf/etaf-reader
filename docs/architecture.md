@@ -15,7 +15,7 @@ delegated to ETAF DB; neither is re-implemented here.
 | `etaf-reader-model` | session refs, wrapping, pagination, selection, annotations, search, progress |
 | `etaf-reader-navigation` | library queries/pages, persisted preferences, navigation panes and bounded jump history |
 | `etaf-reader-views` | pure renderers read from the session refs |
-| `etaf-reader-app` | buffer, keymap, window metrics, commands, mount/unmount |
+| `etaf-reader-app` | application lifecycle (`etaf-app-open`), root keys, window fit, commands |
 
 The root entry re-exports the supported subset; everything unlisted is
 internal.

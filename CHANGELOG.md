@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+### Removed
+
+- `etaf-reader-mode-map` is removed. The reader runs as an ETAF application
+  and declares its keys on its root View; `C-c h` lists them. Keys the reader
+  does not declare fall through to your own bindings, so bind an extra
+  command globally instead.
+
 ### Changed
+
+- `etaf-reader-close` closes the open reader from any buffer, and killing
+  the reader buffer directly also saves the reading position.
 
 - `?`, `C-c h` and More → Shortcuts share a searchable, read-only help modal
   inside the reader. Effective bindings supply its short labels; Escape or
@@ -13,6 +23,8 @@
 
 ### Fixed
 
+- `t` repaints the cells beyond the page in the new theme instead of keeping
+  the theme the reader opened with.
 - The minibuffer and echo area borrow window lines without shrinking the
   shelf or the reading metrics: the reader keeps the layout it committed
   until the prompt closes.

@@ -84,10 +84,10 @@ notes dialog opens annotation editing or exports Markdown. `Esc` closes a pane;
 ## Keyboard help
 
 `?`, `C-c h` and **More → Shortcuts** open the same read-only help modal in the
-current reader buffer. Labels come from effective bindings, including local
-keymap overrides. `/` searches; Escape leaves search editing first, then
-closes the modal and restores the reader focus. An outside click also closes
-help without activating the background. Wide windows show two columns;
+current reader buffer. Labels come from the reader's declared keys. `/`
+searches; Escape leaves search editing first, then closes the modal and
+restores the reader focus. An outside click also closes help without
+activating the background. Wide windows show two columns;
 compact windows use one scrolling column, following the reading theme.
 
 For a mounted session, `(etaf-reader-show-pane reader 'help)` opens this same

@@ -423,6 +423,31 @@
         (should (eq (plist-get state :mode) 'scroll))
         (should (eq (plist-get state :density) 'compact))))))
 
+(ert-deftest etaf-reader-tests-root-keys-own-the-canvas ()
+  "The reader's keys beat the renderer and its canvas follows the theme."
+  (etaf-reader-tests--with-environment
+    (let* ((folder (make-temp-file "reader-canvas-" t))
+           (session (etaf-reader-tests--open
+                     (etaf-reader-create :parser (etaf-reader-tests--parser folder)
+                                         :theme 'dark)))
+           (canvas (lambda (buffer)
+                     (with-current-buffer buffer
+                       (plist-get (car (last (alist-get 'default face-remapping-alist)))
+                                  :background))))
+           buffer)
+      (unwind-protect
+          (save-window-excursion
+            (setq buffer (etaf-reader-open session))
+            (should (equal (funcall canvas buffer) "#0F1216"))
+            (with-current-buffer buffer (execute-kbd-macro (kbd "t")))
+            (should (eq (plist-get (etaf-reader-state session) :theme) 'light))
+            (should (equal (funcall canvas buffer) "#FFFFFF"))
+            (with-current-buffer buffer (execute-kbd-macro (kbd "q")))
+            (should-not (buffer-live-p buffer)))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-reader-close)))
+        (delete-directory folder t)))))
+
 (ert-deftest etaf-reader-tests-navigation-panes-and-return-position ()
   "Mounted navigation opens, pages and closes without losing the reading page."
   (etaf-reader-tests--with-environment

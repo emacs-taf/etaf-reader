@@ -11,9 +11,9 @@
 ;; a reactive source, so a page turn, an annotation or a theme change repaints
 ;; without a remount.
 ;;
-;; Keys are buffer-local commands, not components: reading is a keyboard
-;; activity, and a window resize re-runs the layout through
-;; `window-size-change-functions' together with the framework's own refit.
+;; The reader runs as an ETAF application (`etaf-app-open'): its keys are the
+;; root Host's `:keys', the base canvas follows the palette, and each settled
+;; window resize repaginates through the application's fit function.
 
 ;;; Code:
 
@@ -25,11 +25,8 @@
 (require 'etaf-reader-model)
 (require 'etaf-reader-views)
 
-(defvar-local etaf-reader--session nil
-  "Reader session shown by the current buffer's runtime.")
-
-(defvar etaf-reader--size-hook-installed nil
-  "Whether the global window-size hook was installed.")
+(defconst etaf-reader--buffer-name "*ETAF Reader*"
+  "Buffer that shows the reader.")
 
 ;;; ---------------------------------------------------------------------------
 ;;; Small helpers
@@ -37,7 +34,7 @@
 
 (defun etaf-reader--current ()
   "Return the current buffer's reader session."
-  (or etaf-reader--session
+  (or (etaf-app-state)
       (user-error "Not an ETAF reader buffer")))
 
 (defun etaf-reader--call (function)
@@ -95,94 +92,67 @@
   :render
   (etaf-reader-view reader))
 
-(defun etaf-reader-view-for-session (session)
-  "Return the mountable View of SESSION."
-  (etaf-view (etaf-reader-app :session session)))
-
 ;;; ---------------------------------------------------------------------------
 ;;; Window metrics
 ;;; ---------------------------------------------------------------------------
 
-(defun etaf-reader--window-size-changed (frame)
-  "Reflow every reader shown on FRAME after a window resize.
-The mount follows the window itself; the reader only repaginates.  Lines
-borrowed by the minibuffer keep the metrics the session already committed."
-  (dolist (window (window-list frame))
-    (let ((buffer (window-buffer window)))
-      (when (buffer-live-p buffer)
-        (when-let* ((session (buffer-local-value 'etaf-reader--session buffer)))
-          (unless (etaf-transient-space-borrowed-p
-                   window (etaf-reader--read session :window-rows))
-            (etaf-reader-guard
-             session (lambda ()
-                       (etaf-reader-sync-metrics session
-                                                 (window-body-width window)
-                                                 (window-body-height window))))))))))
-
-(defun etaf-reader--install-size-hook ()
-  "Install the reader's global window-size hook once."
-  (unless etaf-reader--size-hook-installed
-    (add-hook 'window-size-change-functions #'etaf-reader--window-size-changed t)
-    (setq etaf-reader--size-hook-installed t)))
+(defun etaf-reader--fit (session window)
+  "Repaginate SESSION for WINDOW, its display window."
+  (plist-put session :buffer (current-buffer))
+  (etaf-reader-guard
+   session (lambda ()
+             (etaf-reader-sync-metrics session
+                                       (window-body-width window)
+                                       (window-body-height window)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap
 ;;; ---------------------------------------------------------------------------
 
-(defvar etaf-reader-mode-map
-  (let ((map (make-sparse-keymap)))
-    (dolist (binding '(("SPC" etaf-reader-next-page-command "阅读下一页")
-                       ("S-SPC" etaf-reader-previous-page-command "阅读上一页")
-                       ("C-v" etaf-reader-next-page-command "阅读下一页")
-                       ("M-v" etaf-reader-previous-page-command "阅读上一页")
-                       ("<next>" etaf-reader-next-page-command "阅读下一页")
-                       ("DEL" etaf-reader-previous-page-command "阅读上一页")
-                       ("<prior>" etaf-reader-previous-page-command "阅读上一页")
-                       ("H" etaf-reader-chapter-backward-command "上一章")
-                       ("L" etaf-reader-chapter-forward-command "下一章")
-                       ("v" etaf-reader-toggle-selection-command "切换文字选择")
-                       ("RET" etaf-reader-return-command "确认选区／激活控件")
-                       ("C-c C-k" etaf-reader-cancel-selection-command "关闭面板／取消选区")
-                       ("s" etaf-reader-search-command "搜索全书")
-                       ("n" etaf-reader-search-next-command "下一个匹配")
-                       ("N" etaf-reader-search-previous-command "上一个匹配")
-                       ("c" etaf-reader-toc-command "目录")
-                       ("a" etaf-reader-notes-command "笔记与划线")
-                       ("b" etaf-reader-bookmark-command "收藏当前页")
-                       ("B" etaf-reader-bookmarks-command "书签列表")
-                       ("S" etaf-reader-search-results-command "搜索结果")
-                       ("o" etaf-reader-settings-command "阅读设置")
-                       ("u" etaf-reader-jump-back-command "返回跳转前")
-                       ("g" etaf-reader-goto-percent-command "跳转阅读进度")
-                       ("z" etaf-reader-toggle-mode-command "切换分页／滚动")
-                       ("[" etaf-reader-narrower-command "收窄阅读栏")
-                       ("]" etaf-reader-wider-command "加宽阅读栏")
-                       ("t" etaf-reader-toggle-theme-command "切换阅读主题")
-                       ("f" etaf-reader-shelf-command "返回书库")
-                       ("i" etaf-reader-scan-command "重新扫描书库")
-                       ("E" etaf-reader-export-command "导出笔记")
-                       ("C-c h" etaf-help "查看快捷键")
-                       ("q" etaf-reader-close "关闭阅读器")
-                       ("<wheel-down>" etaf-reader-wheel-down-command "向下阅读")
-                       ("<wheel-up>" etaf-reader-wheel-up-command "向上阅读")
-                       ("<mouse-5>" etaf-reader-wheel-down-command "向下阅读")
-                       ("<mouse-4>" etaf-reader-wheel-up-command "向上阅读")))
-      (define-key map (kbd (car binding))
-                  (list 'menu-item (nth 2 binding) (nth 1 binding))))
-    map)
-  "Keymap of a buffer opened by `etaf-reader-open'.")
+(defconst etaf-reader--bindings
+  '(("SPC" etaf-reader-next-page-command "阅读下一页")
+    ("S-SPC" etaf-reader-previous-page-command "阅读上一页")
+    ("C-v" etaf-reader-next-page-command "阅读下一页")
+    ("M-v" etaf-reader-previous-page-command "阅读上一页")
+    ("<next>" etaf-reader-next-page-command "阅读下一页")
+    ("DEL" etaf-reader-previous-page-command "阅读上一页")
+    ("<prior>" etaf-reader-previous-page-command "阅读上一页")
+    ("H" etaf-reader-chapter-backward-command "上一章")
+    ("L" etaf-reader-chapter-forward-command "下一章")
+    ("v" etaf-reader-toggle-selection-command "切换文字选择")
+    ("RET" etaf-reader-return-command "确认选区／激活控件")
+    ("C-c C-k" etaf-reader-cancel-selection-command "关闭面板／取消选区")
+    ("s" etaf-reader-search-command "搜索全书")
+    ("n" etaf-reader-search-next-command "下一个匹配")
+    ("N" etaf-reader-search-previous-command "上一个匹配")
+    ("c" etaf-reader-toc-command "目录")
+    ("a" etaf-reader-notes-command "笔记与划线")
+    ("b" etaf-reader-bookmark-command "收藏当前页")
+    ("B" etaf-reader-bookmarks-command "书签列表")
+    ("S" etaf-reader-search-results-command "搜索结果")
+    ("o" etaf-reader-settings-command "阅读设置")
+    ("u" etaf-reader-jump-back-command "返回跳转前")
+    ("g" etaf-reader-goto-percent-command "跳转阅读进度")
+    ("z" etaf-reader-toggle-mode-command "切换分页／滚动")
+    ("[" etaf-reader-narrower-command "收窄阅读栏")
+    ("]" etaf-reader-wider-command "加宽阅读栏")
+    ("t" etaf-reader-toggle-theme-command "切换阅读主题")
+    ("f" etaf-reader-shelf-command "返回书库")
+    ("i" etaf-reader-scan-command "重新扫描书库")
+    ("E" etaf-reader-export-command "导出笔记")
+    ("C-c h" etaf-help "查看快捷键")
+    ("q" etaf-reader-close "关闭阅读器")
+    ("<wheel-down>" etaf-reader-wheel-down-command "向下阅读")
+    ("<wheel-up>" etaf-reader-wheel-up-command "向上阅读")
+    ("<mouse-5>" etaf-reader-wheel-down-command "向下阅读")
+    ("<mouse-4>" etaf-reader-wheel-up-command "向上阅读"))
+  "Root keys of the reader, as (KEY COMMAND LABEL).
+They beat the renderer's own minor-mode map; a focused control still takes
+RET, and the reader's RET dispatches between a selection and activation.")
 
-;;; ---------------------------------------------------------------------------
-;;; Renderer-owned keys
-;;; ---------------------------------------------------------------------------
-
-(defvar etaf-reader--command-maps
-  (list (cons 'etaf-reader--session etaf-reader-mode-map))
-  "Reader bindings that must beat the renderer's own minor-mode map.
-The alist's key is `etaf-reader--session', the buffer-local variable every
-reader buffer owns, so the entry is active exactly there.  TAB focus cycling
-and activation of focused controls stay the renderer's (RET dispatches
-between them).")
+(defun etaf-reader-view-for-session (session)
+  "Return the mountable View of SESSION."
+  (etaf-view (etaf-reader-app :session session :keys etaf-reader--bindings)))
 
 (defun etaf-reader-return-command ()
   "Confirm the current selection, or activate the focused control."
@@ -494,49 +464,25 @@ unless a keyboard selection is active, when they move its cursor."
 ;;; ---------------------------------------------------------------------------
 
 (defun etaf-reader--display (session)
-  "Mount SESSION in its buffer and return that buffer."
-  (let* ((buffer (get-buffer-create "*ETAF Reader*"))
-         (window (get-buffer-window buffer t)))
-    ;; A new session must not retain the old Component's bindings or timer.
-    (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
-      (with-current-buffer buffer
-        (when etaf-reader--session
-          (let ((etaf-reader-store-file (plist-get etaf-reader--session :store-file)))
-            (etaf-reader-save-quiet etaf-reader--session))))
-      (etaf-unmount runtime))
+  "Open SESSION as the reader application and return its buffer.
+An open reader closes first and saves its position."
+  ;; Store reads happen before mounting: creating Data Controllers inside
+  ;; ETAF's publication is a render side effect and is rejected.
+  (etaf-reader--write session :books (etaf-reader-store-books))
+  (etaf-reader-refresh-states session)
+  (let ((buffer
+         (etaf-app-open
+          etaf-reader--buffer-name (etaf-reader-view-for-session session)
+          :state session
+          :background (lambda ()
+                        (etaf-reader-color :bg (etaf-reader--read session :theme)))
+          :on-fit (lambda (window) (etaf-reader--fit session window))
+          :on-close (lambda ()
+                      (let ((etaf-reader-store-file (plist-get session :store-file)))
+                        (etaf-reader-save-quiet session))
+                      (plist-put session :buffer nil)))))
     (plist-put session :buffer buffer)
-    (with-current-buffer buffer
-      (setq-local etaf-reader--session session)
-      (setq-local truncate-lines t)
-      (setq-local auto-hscroll-mode nil)
-      (setq-local mode-line-format nil)
-      (setq-local emulation-mode-map-alists
-                  (cons 'etaf-reader--command-maps
-                        (remq 'etaf-reader--command-maps
-                              emulation-mode-map-alists)))
-      (setq-local buffer-display-table
-                  (let ((table (copy-sequence (or standard-display-table
-                                                  (make-display-table)))))
-                    (set-display-table-slot table 'truncation ?\s)
-                    table))
-      (face-remap-set-base 'default
-                           (list :background
-                                 (etaf-reader-color :bg (etaf-reader--read session :theme))))
-      (use-local-map etaf-reader-mode-map))
-    ;; A native text application owns the window it was opened from: a
-    ;; `display-buffer' rule must not split the frame into a second pane.
-    (let ((display-buffer-overriding-action '((display-buffer-same-window))))
-      (pop-to-buffer buffer))
-    (setq window (get-buffer-window buffer t))
-    (when (window-live-p window) (set-window-hscroll window 0))
-    ;; Store reads happen before mounting: creating Data Controllers inside
-    ;; ETAF's publication is a render side effect and is rejected.
-    (etaf-reader--write session :books (etaf-reader-store-books))
-    (etaf-reader-refresh-states session)
-    (etaf-reader-sync-metrics session)
-    (etaf-mount buffer (etaf-reader-view-for-session session))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
-    (etaf-reader--install-size-hook)
     buffer))
 
 (defun etaf-reader--open-path (session path)
@@ -595,14 +541,9 @@ and tests display the exact state they built."
 (defun etaf-reader-close ()
   "Save the reading position and close the reader."
   (interactive)
-  (let* ((session (etaf-reader--current))
-         (buffer (current-buffer))
-         (etaf-reader-store-file (plist-get session :store-file)))
-    (etaf-reader-save-quiet session)
-    (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
-      (etaf-unmount runtime))
-    (plist-put session :buffer nil)
-    (kill-buffer buffer)))
+  (unless (etaf-app-state etaf-reader--buffer-name)
+    (user-error "No ETAF reader is open"))
+  (etaf-app-close etaf-reader--buffer-name))
 
 (provide 'etaf-reader-app)
 ;;; etaf-reader-app.el ends here

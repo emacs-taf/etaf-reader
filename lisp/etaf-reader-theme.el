@@ -13,6 +13,7 @@
 ;;; Code:
 
 (require 'etaf)
+(require 'etaf-ui)
 
 (define-error 'etaf-reader-error "ETAF reader error")
 
@@ -86,39 +87,30 @@ An unknown KEY signals `etaf-reader-error' instead of painting a fallback."
   "Return the ETAF UI token plist for MODE.
 The application passes the result to `etaf-theme-provide' so shared etaf-ui
 Components follow the reader's palette."
-  (let* ((dark (eq (or mode etaf-reader-theme) 'dark))
-         (bg (etaf-reader-color :bg mode))
-         (panel (etaf-reader-color :panel mode))
-         (panel2 (etaf-reader-color :panel2 mode))
-         (line (etaf-reader-color :line mode))
-         (ink (etaf-reader-color :ink mode))
-         (muted (etaf-reader-color :muted mode))
-         (dim (etaf-reader-color :dim mode))
-         (accent (etaf-reader-color :accent mode))
-         (accent-soft (etaf-reader-color :accent-soft mode))
-         (ok (if dark "#4FBF8B" "#2E7D5B"))
-         (danger (etaf-reader-color :red mode))
-         (warn (etaf-reader-color :gold mode)))
-    (list
-     :ink ink :paper bg :panel panel :line line :muted muted :accent accent
-     :accent-soft accent-soft
-     :ui-fg ink :ui-bg bg :ui-border line :ui-muted-fg muted
-     :ui-disabled-fg dim :ui-disabled-bg panel2 :ui-disabled-border line
-     :ui-accent accent :ui-accent-fg "#FFFFFF" :ui-accent-soft-bg accent-soft
-     :ui-button-primary-fg "#FFFFFF" :ui-button-primary-bg accent
-     :ui-button-secondary-fg accent :ui-button-secondary-bg accent-soft
-     :ui-button-ghost-fg muted
-     :ui-success-fg ok :ui-danger-fg danger :ui-danger-bg (etaf-reader-color :red-soft mode)
-     :ui-danger-border danger
-     :ui-warning-fg warn :ui-warning-bg (etaf-reader-color :yellow-soft mode)
-     :ui-panel-fg ink :ui-panel-bg panel :ui-panel-border line
-     :ui-divider-bg line
-     :ui-progress-track panel2 :ui-progress-value accent
-     :ui-table-border line :ui-table-selected-fg accent :ui-table-selected-bg accent-soft
-     :ui-shell-bg panel :ui-shell-fg ink :ui-shell-muted-fg muted
-     :ui-picker-item-bg panel :ui-picker-item-fg ink
-     :ui-pagination-muted-fg muted
-     :ui-checkbox-enabled-fg ink :ui-checkbox-disabled-fg dim)))
+  (let ((dark (eq (or mode etaf-reader-theme) 'dark))
+        (panel2 (etaf-reader-color :panel2 mode))
+        (danger (etaf-reader-color :red mode)))
+    ;; Disabled fills sit on the second panel tone, one step above the
+    ;; catalog's default of the first.
+    (cons :ui-disabled-bg
+          (cons panel2
+                (etaf-ui-theme-tokens
+                 (list :bg (etaf-reader-color :bg mode)
+                       :fg (etaf-reader-color :ink mode)
+                       :panel (etaf-reader-color :panel mode)
+                       :track panel2
+                       :border (etaf-reader-color :line mode)
+                       :muted (etaf-reader-color :muted mode)
+                       :dim (etaf-reader-color :dim mode)
+                       :accent (etaf-reader-color :accent mode)
+                       :accent-fg "#FFFFFF"
+                       :accent-soft (etaf-reader-color :accent-soft mode)
+                       :success (if dark "#4FBF8B" "#2E7D5B")
+                       :danger danger
+                       :danger-bg (etaf-reader-color :red-soft mode)
+                       :danger-border danger
+                       :warning (etaf-reader-color :gold mode)
+                       :warning-bg (etaf-reader-color :yellow-soft mode)))))))
 
 (provide 'etaf-reader-theme)
 ;;; etaf-reader-theme.el ends here
