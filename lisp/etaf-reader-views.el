@@ -181,16 +181,53 @@ Host per slot also keeps blank and final-page slots addressable."
         (put-text-property 0 (length text) 'reader-line (plist-get line :key) text))
       text)))
 
+(defun etaf-reader--line-image (session line)
+  "Return LINE's picture as (:src :columns :rows), or nil when unavailable.
+Import extracts each chapter's images beside its chapters, so a block's :src
+is a path inside the book's cache directory."
+  (let* ((src (plist-get line :src))
+         (book (etaf-reader--read session :book))
+         (id (plist-get book :id))
+         (path (and src id
+                    (expand-file-name src (etaf-reader--cache-book-directory id)))))
+    (when (and path (file-readable-p path))
+      (let* ((columns (min 40 (max 16 (or (plist-get (etaf-reader--read session :metrics)
+                                                     :columns)
+                                          40))))
+             (pixels (ignore-errors (image-size (create-image path) t)))
+             (char-width (max 1 (frame-char-width)))
+             (char-height (max 1 (frame-char-height)))
+             (rows (if pixels
+                       (max 1 (min 24 (round (/ (* columns char-width (cdr pixels))
+                                                (* (car pixels) char-height)))))
+                     8)))
+        (list :src path :columns columns :rows rows)))))
+
 (defun etaf-reader--view-line (session line theme)
-  "Return one fixed, retained line slot for LINE."
+  "Return one fixed, retained line slot for LINE.
+An image line paints the extracted picture instead of its placeholder text;
+every other line keeps the retained Text Host so page turns patch instead of
+rebuilding."
   (let* ((slot (or (plist-get line :slot) 0))
-         (id (format "reader-text-%d" slot)))
-    (etaf-node
-     'box
-     (list :key slot :id (format "reader-line-%d" slot)
-           :width 'stretch :height '(lh 1) :overflow 'hidden :wrap-mode 'none)
-     (list (etaf-node 'text (list :ref (intern id) :id id)
-                      (list (etaf-reader--line-content session line theme)))))))
+         (id (format "reader-text-%d" slot))
+         (image (and (eq (plist-get line :kind) 'img)
+                     (etaf-reader--line-image session line))))
+    (if image
+        (etaf-node
+         'box
+         (list :key slot :id (format "reader-line-%d" slot)
+               :width 'stretch :height (list 'lh (plist-get image :rows))
+               :overflow 'hidden :wrap-mode 'none)
+         (list (etaf-node 'image (list :src (plist-get image :src)
+                                       :columns (plist-get image :columns)
+                                       :rows (plist-get image :rows))
+                          nil)))
+      (etaf-node
+       'box
+       (list :key slot :id (format "reader-line-%d" slot)
+             :width 'stretch :height '(lh 1) :overflow 'hidden :wrap-mode 'none)
+       (list (etaf-node 'text (list :ref (intern id) :id id)
+                        (list (etaf-reader--line-content session line theme))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Selection toolbar
@@ -408,7 +445,8 @@ Host per slot also keeps blank and final-page slots addressable."
                  :background-color (etaf-reader-color :bg theme)
                  :item-gap '(lh 0) :padding '((lh 1) (ch 2))
            (expr
-            (if (etaf-reader--read session :toolbar)
+            (if (or (etaf-reader--read session :toolbar)
+                    (cl-some (lambda (line) (eq (plist-get line :kind) 'img)) slice))
                 ;; Line anchors exist only while the nearby toolbar needs one.
                 (mapcar (lambda (line)
                           (etaf-reader--view-line session line theme)) slice)
